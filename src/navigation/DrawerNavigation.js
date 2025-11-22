@@ -1,27 +1,39 @@
-import { MaterialIcons } from '@expo/vector-icons';
 import { createDrawerNavigator } from '@react-navigation/drawer';
-
-// import local screens
 import SettingScreen from '../screens/SettingScreen';
 import TabNavigator from './TabNavigator';
 
 const Drawer = createDrawerNavigator();
 
-export default function DrawerNavigation({ navigation }) {
+export default function DrawerNavigation() {
     return (
-        <Drawer.Navigator>
-            <Drawer.Screen name="Inicio" component={TabNavigator}
+        <Drawer.Navigator
+            screenOptions={{
+                headerShown: false,
+                drawerStyle: {
+                    backgroundColor: '#121212',
+                    width: 240,
+                },
+                drawerLabelStyle: {
+                    color: '#FFFFFF',
+                },
+                drawerActiveTintColor: '#BB86FC',
+                drawerInactiveTintColor: '#888888',
+            }}
+        >
+            <Drawer.Screen 
+                name="Inicio" 
+                component={TabNavigator}
                 options={{
-                    headerShown: false,
-                    drawerIcon: ({ color }) => (<MaterialIcons name='home' size={25} color={color} />)
-                    }}
+                    title: 'Inicio',
+                }}
             />
-            <Drawer.Screen name="Config" component={SettingScreen}
+            <Drawer.Screen 
+                name="Configuración" 
+                component={SettingScreen}
                 options={{
-                    // headerShown: false,
-                    drawerIcon: ({ color }) => (<MaterialIcons name='settings' size={25} color={color} />)
+                    title: 'Configuración',
                 }}
             />
         </Drawer.Navigator>
-    )
+    );
 }

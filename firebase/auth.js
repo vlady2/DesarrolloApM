@@ -1,23 +1,22 @@
+import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
 import { initializeApp } from "firebase/app";
 import { getReactNativePersistence, initializeAuth } from "firebase/auth";
 import { getFirestore } from "firebase/firestore";
-import { getStorage } from "firebase/storage"; // nuevo, para almacenamiento
+import { getStorage } from "firebase/storage";
 import firebaseConfig from "./config";
 
-import ReactNativeAsyncStorage from '@react-native-async-storage/async-storage';
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
 
-// ✅ Evitar múltiples inicializaciones (por hot reload en Expo)
-// const app = !getApps().length ? initializeApp(firebaseConfig) : getApp();
-const app =  initializeApp(firebaseConfig);
-
-const storage = getStorage(app); // nuevo, para almacenamiento
-
-// ✅ Auth con persistencia en React Native
+// Inicializar Auth con persistencia
 const auth = initializeAuth(app, {
   persistence: getReactNativePersistence(ReactNativeAsyncStorage)
 });
 
-// ✅ Firestore
+// Inicializar Firestore
 const db = getFirestore(app);
+
+// Inicializar Storage
+const storage = getStorage(app);
 
 export { auth, db, storage };
