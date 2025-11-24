@@ -21,6 +21,7 @@ const MyTripsScreen = ({ navigation }) => {
   const [trips, setTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [hasError, setHasError] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     loadTrips();
@@ -30,12 +31,36 @@ const MyTripsScreen = ({ navigation }) => {
     try {
       setLoading(true);
       setHasError(false);
+      setErrorMessage('');
+      
+      console.log('🟡 Cargando viajes desde MyTripsScreen...');
       const userTrips = await getUserTrips();
+      
+      console.log('🟢 Viajes recibidos:', userTrips.length);
+      console.log('📋 Datos de viajes:', userTrips.map(trip => ({
+        id: trip.id,
+        destination: trip.destination,
+        itemCount: trip.itemCount
+      })));
+      
       setTrips(userTrips);
+      
     } catch (error) {
-      // Usar console.log en lugar de console.error para evitar que aparezca en rojo
-      console.log('Error cargando viajes:', error.message);
+      console.log('❌ Error cargando viajes:', error.message);
+      console.log('🔍 Error completo:', error);
+      
       setHasError(true);
+      
+      // ✅ MANEJO ESPECÍFICO DE ERRORES
+      if (error.message.includes('índice') || error.code === 'failed-precondition') {
+        setErrorMessage('Configuración de base de datos incompleta. Esto se solucionará automáticamente.');
+      } else if (error.message.includes('permisos')) {
+        setErrorMessage('No tienes permisos para ver los viajes.');
+      } else if (error.message.includes('autenticado')) {
+        setErrorMessage('Debes iniciar sesión para ver tus viajes.');
+      } else {
+        setErrorMessage('Error al cargar los viajes: ' + error.message);
+      }
     } finally {
       setLoading(false);
     }
@@ -56,6 +81,7 @@ const MyTripsScreen = ({ navigation }) => {
               Alert.alert('Éxito', 'Viaje eliminado correctamente');
             } catch (error) {
               console.log('Error eliminando viaje:', error.message);
+              Alert.alert('Error', 'No se pudo eliminar el viaje');
             }
           },
           style: 'destructive'
@@ -64,27 +90,38 @@ const MyTripsScreen = ({ navigation }) => {
     );
   };
 
-  // ... el resto de tu código permanece igual
   const renderTripItem = ({ item }) => (
-    <TouchableOpacity style={styles.tripItem}>
+    <TouchableOpacity 
+      style={styles.tripItem}
+      onPress={() => navigation.navigate('TripDetail', { trip: item })}
+    >
       <View style={styles.tripInfo}>
-        <Text style={styles.tripDestination}>{item.destination}</Text>
+        <Text style={styles.tripDestination}>
+          {item.tripName || 'Viaje sin nombre'}
+        </Text>
         <Text style={styles.tripDates}>
           {item.startDate} {item.endDate ? `- ${item.endDate}` : ''}
         </Text>
-        <Text style={styles.tripPurpose}>{item.purpose}</Text>
-        <Text style={styles.tripItems}>{item.itemCount} artículos</Text>
+        <Text style={styles.tripPurpose}>
+          {item.purpose || 'Sin propósito especificado'}
+        </Text>
+        <Text style={styles.tripItems}>
+          {item.itemCount || 0} artículo{item.itemCount !== 1 ? 's' : ''}
+        </Text>
+        <Text style={styles.tripId}>
+          ID: {item.id?.substring(0, 8)}...
+        </Text>
       </View>
       <View style={styles.tripActions}>
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => console.log('Ver detalle:', item.id)}
+          onPress={() => navigation.navigate('EditTrip', { trip: item })}
         >
-          <Ionicons name="eye" size={20} color="#2196F3" />
+          <Ionicons name="create" size={20} color="#2196F3" />
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.actionButton}
-          onPress={() => handleDeleteTrip(item.id, item.destination)}
+          onPress={() => handleDeleteTrip(item.id, item.tripName || item.destination)}
         >
           <Ionicons name="trash" size={20} color="#F44336" />
         </TouchableOpacity>
@@ -97,6 +134,7 @@ const MyTripsScreen = ({ navigation }) => {
       <View style={styles.loadingContainer}>
         <ActivityIndicator size="large" color="#BB86FC" />
         <Text style={styles.loadingText}>Cargando viajes...</Text>
+        <Text style={styles.loadingSubtext}>Verificando base de datos...</Text>
       </View>
     );
   }
@@ -105,21 +143,24 @@ const MyTripsScreen = ({ navigation }) => {
     <View style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Mis Viajes</Text>
-        <Text style={styles.subtitle}>{trips.length} viajes guardados</Text>
+        <Text style={styles.subtitle}>
+          {trips.length} viaje{trips.length !== 1 ? 's' : ''} guardado{trips.length !== 1 ? 's' : ''}
+        </Text>
       </View>
 
       {hasError ? (
         <View style={styles.emptyContainer}>
-          <Ionicons name="warning" size={64} color="#666" />
-          <Text style={styles.emptyText}>No se pudieron cargar los viajes</Text>
+          <Ionicons name="warning" size={64} color="#FFA726" />
+          <Text style={styles.emptyText}>Error al cargar viajes</Text>
           <Text style={styles.emptySubtext}>
-            Por favor, intenta nuevamente más tarde
+            {errorMessage}
           </Text>
           <TouchableOpacity 
             style={styles.retryButton}
             onPress={loadTrips}
           >
-            <Text style={styles.retryButtonText}>Reintentar</Text>
+            <Ionicons name="reload" size={16} color="#121212" />
+            <Text style={styles.retryButtonText}> Reintentar</Text>
           </TouchableOpacity>
         </View>
       ) : trips.length === 0 ? (
@@ -129,6 +170,12 @@ const MyTripsScreen = ({ navigation }) => {
           <Text style={styles.emptySubtext}>
             Crea tu primer viaje usando el botón "+" en la pantalla principal
           </Text>
+          <TouchableOpacity 
+            style={styles.createButton}
+            onPress={() => navigation.navigate('NewTrip')}
+          >
+            <Text style={styles.createButtonText}>Crear Primer Viaje</Text>
+          </TouchableOpacity>
         </View>
       ) : (
         <FlatList
@@ -137,13 +184,14 @@ const MyTripsScreen = ({ navigation }) => {
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           showsVerticalScrollIndicator={false}
+          refreshing={loading}
+          onRefresh={loadTrips}
         />
       )}
     </View>
   );
 };
 
-// ... tus estilos permanecen igual
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -157,6 +205,12 @@ const styles = StyleSheet.create({
   loadingText: {
     color: '#FFFFFF',
     marginTop: 10,
+    fontSize: 16,
+  },
+  loadingSubtext: {
+    color: '#888',
+    marginTop: 5,
+    fontSize: 12,
   },
   header: {
     padding: 20,
@@ -183,7 +237,7 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 10,
     justifyContent: 'space-between',
-    alignItems: 'center',
+    alignItems: 'flex-start',
   },
   tripInfo: {
     flex: 1,
@@ -207,10 +261,17 @@ const styles = StyleSheet.create({
   tripItems: {
     fontSize: 12,
     color: '#4CAF50',
+    marginBottom: 2,
+  },
+  tripId: {
+    fontSize: 10,
+    color: '#666',
+    fontFamily: 'monospace',
   },
   tripActions: {
     flexDirection: 'row',
     gap: 10,
+    marginLeft: 10,
   },
   actionButton: {
     padding: 8,
@@ -233,16 +294,29 @@ const styles = StyleSheet.create({
     color: '#888',
     textAlign: 'center',
     lineHeight: 20,
+    marginBottom: 20,
   },
   retryButton: {
-    marginTop: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
     backgroundColor: '#BB86FC',
     paddingHorizontal: 20,
-    paddingVertical: 10,
+    paddingVertical: 12,
     borderRadius: 8,
   },
   retryButtonText: {
     color: '#121212',
+    fontWeight: 'bold',
+  },
+  createButton: {
+    backgroundColor: '#4CAF50',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+    marginTop: 10,
+  },
+  createButtonText: {
+    color: '#FFFFFF',
     fontWeight: 'bold',
   },
 });

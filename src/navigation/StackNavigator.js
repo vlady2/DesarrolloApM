@@ -7,9 +7,11 @@ import PlayListDetailScreen from '../screens/PlayListDetailScreen';
 import ProfileScreen from '../screens/ProfileScreen';
 import SongDetailScreen from '../screens/SongDetailScreen';
 // Import nuevas pantallas de viajes
+import EditTripScreen from '../screens/EditTripScreen';
 import ItemsInBoxScreen from '../screens/ItemsInBoxScreen';
 import NewMoveScreen from '../screens/NewMoveScreen';
 import NewTripScreen from '../screens/NewTripScreen';
+import TripDetailScreen from '../screens/TripDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -58,6 +60,22 @@ export default function StackNavigator({navigation}) {
                 options={{
                     title: 'Mis Maletas / Cajas',
                     headerLeft: (() => openDrawer({navigation}))
+                }}
+            />
+            <Stack.Screen 
+                name="TripDetail"
+                component={TripDetailScreen}
+                options={{
+                    title: 'Detalle del Viaje',
+                    headerLeft: (() => openDrawer({ navigation }))
+                }}
+            />
+            <Stack.Screen
+                name="EditTrip"
+                component={EditTripScreen}
+                options={{
+                    title: 'Editar Viaje',
+                    headerLeft: (() => openDrawer({ navigation }))
                 }}
             />
         </Stack.Navigator>

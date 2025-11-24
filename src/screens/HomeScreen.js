@@ -3,12 +3,12 @@ import { useState } from 'react';
 import {
   Alert,
   FlatList,
-  SafeAreaView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { auth } from '../../firebase/auth';
 import FloatingActionButton from '../components/FloatingActionButton';

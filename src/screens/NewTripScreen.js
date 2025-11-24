@@ -1,5 +1,5 @@
 import { GROQ_API_KEY } from '@env';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +11,7 @@ import {
   View
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { auth } from '../../firebase/config';
+import { auth } from '../../firebase/auth';
 import { saveTrip } from '../../firebase/tripService';
 
 const NewTripScreen = ({ navigation }) => {
@@ -29,69 +29,90 @@ const NewTripScreen = ({ navigation }) => {
   const [loadingAI, setLoadingAI] = useState(false);
   const [saving, setSaving] = useState(false);
 
+  useEffect(() => {
+    console.log('🔐 Estado de autenticación:', auth.currentUser);
+    console.log('📱 NewTripScreen montado');
+  }, []);
+
+  useEffect(() => {
+    console.log('🔑 GROQ_API_KEY cargada:', GROQ_API_KEY ? 'SÍ' : 'NO');
+    console.log('📏 Longitud de API_KEY:', GROQ_API_KEY?.length);
+    console.log('🔍 Primeros 10 caracteres:', GROQ_API_KEY?.substring(0, 10) + '...');
+  }, []);
+
   // Función de IA REAL para sugerencias
   const getAISuggestions = async () => {
-    if (!trip.destination && !trip.purpose) {
-      Alert.alert('Info', 'Completa al menos el destino o propósito para mejores sugerencias');
-      return;
+  if (!trip.destination && !trip.purpose) {
+    Alert.alert('Info', 'Completa al menos el destino o propósito para mejores sugerencias');
+    return;
+  }
+
+  setLoadingAI(true);
+  try {
+    const API_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+    const prompt = `Como experto en viajes, sugiere 8 artículos esenciales para llevar en un viaje a ${trip.destination} con propósito: ${trip.purpose}. 
+    Responde SOLO con una lista separada por comas, sin numeración ni explicaciones.`;
+
+    const response = await fetch(API_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${GROQ_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: "llama-3.1-8b-instant",
+        messages: [
+          {
+            role: "system",
+            content: "Eres un asistente especializado en viajes. Proporcionas listas concisas de artículos esenciales."
+          },
+          {
+            role: "user",
+            content: prompt
+          }
+        ],
+        temperature: 0.7,
+        max_tokens: 150,
+      }),
+    });
+
+    // ✅ AGREGAR VERIFICACIÓN DE RESPUESTA
+    if (!response.ok) {
+      throw new Error(`Error HTTP: ${response.status}`);
     }
 
-    setLoadingAI(true);
-    try {
-      
-      const API_URL = "https://api.groq.com/openai/v1/chat/completions";
-
-      const prompt = `Como experto en viajes, sugiere 8 artículos esenciales para llevar en un viaje a ${trip.destination} con propósito: ${trip.purpose}. 
-      Responde SOLO con una lista separada por comas, sin numeración ni explicaciones.`;
-
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [
-            {
-              role: "system",
-              content: "Eres un asistente especializado en viajes. Proporcionas listas concisas de artículos esenciales."
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 150,
-        }),
-      });
-
-      const data = await response.json();
-      const aiMessage = data.choices[0].message.content;
-      
-      // Procesar la respuesta de la IA
-      const suggestions = aiMessage.split(',').map(item => item.trim()).filter(item => item);
-      setAiSuggestions(suggestions);
-      
-    } catch (error) {
-      console.error('Error con IA:', error);
-      // Sugerencias por defecto si falla la IA
-      const defaultSuggestions = [
-        'Pasaporte y documentos',
-        'Adaptador de enchufes',
-        'Medicamentos personales',
-        'Protector solar',
-        'Cargador portátil',
-        'Botella de agua reusable',
-        'Snacks para el viaje',
-        'Kit de primeros auxilios'
-      ];
-      setAiSuggestions(defaultSuggestions);
-    } finally {
-      setLoadingAI(false);
+    const data = await response.json();
+    
+    // ✅ VERIFICAR QUE LA RESPUESTA TENGA LOS DATOS ESPERADOS
+    if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+      throw new Error('Respuesta de IA en formato incorrecto');
     }
-  };
+    
+    const aiMessage = data.choices[0].message.content;
+    
+    // Procesar la respuesta de la IA
+    const suggestions = aiMessage.split(',').map(item => item.trim()).filter(item => item);
+    setAiSuggestions(suggestions);
+    
+  } catch (error) {
+    console.error('Error con IA:', error);
+    // Sugerencias por defecto si falla la IA
+    const defaultSuggestions = [
+      'Pasaporte y documentos',
+      'Adaptador de enchufes',
+      'Medicamentos personales',
+      'Protector solar',
+      'Cargador portátil',
+      'Botella de agua reusable',
+      'Snacks para el viaje',
+      'Kit de primeros auxilios'
+    ];
+    setAiSuggestions(defaultSuggestions);
+  } finally {
+    setLoadingAI(false);
+  }
+};
 
   const handleAddItem = () => {
     if (newItem.trim()) {
@@ -115,18 +136,31 @@ const NewTripScreen = ({ navigation }) => {
     return;
   }
 
-  // Verificar que el usuario esté autenticado
+   // Verificar que el usuario esté autenticado
   if (!auth.currentUser) {
     Alert.alert('Error', 'Debes iniciar sesión para guardar viajes');
+    console.log('❌ Usuario NO autenticado');
     return;
   }
 
   console.log('🔵 Usuario autenticado:', auth.currentUser.uid);
+  console.log('🟡 Datos del viaje:', {
+    tripName: trip.tripName,
+    destination: trip.destination,
+    itemsCount: items.length,
+    userId: auth.currentUser.uid
+  });
+
   setSaving(true);
   
   try {
     const tripData = {
-      ...trip,
+      tripName: trip.tripName,
+      destination: trip.destination,
+      startDate: trip.startDate,
+      endDate: trip.endDate,
+      purpose: trip.purpose,
+      type: 'viaje',
       items: items.map(item => item.name),
       status: 'planning',
       itemCount: items.length,
@@ -135,22 +169,52 @@ const NewTripScreen = ({ navigation }) => {
       updatedAt: new Date()
     };
 
-    console.log('🟡 Enviando datos a saveTrip:', tripData);
+     console.log('🟡 Enviando datos a saveTrip...');
     
     const result = await saveTrip(tripData);
     console.log('🟢 saveTrip retornó:', result);
     
-    Alert.alert('✅ Éxito', 'Viaje guardado correctamente');
-    navigation.goBack();
+    Alert.alert(
+      '✅ Éxito', 
+      'Viaje guardado correctamente',
+      [
+        {
+          text: 'OK',
+          onPress: () => {
+            // Navegar de regreso de manera segura
+            if (navigation.canGoBack()) {
+              navigation.goBack();
+            } else {
+              navigation.navigate('MainApp'); // O la pantalla principal
+            }
+          }
+        }
+      ]
+    );
     
   } catch (error) {
     console.error('❌ Error en saveTripToFirebase:', error);
-    console.error('❌ Stack trace:', error.stack);
-    Alert.alert('❌ Error', 'No se pudo guardar el viaje: ' + error.message);
+    console.error('❌ Mensaje:', error.message);
+    console.error('❌ Stack:', error.stack);
+    
+    let errorMessage = 'No se pudo guardar el viaje';
+    if (error.message.includes('permission')) {
+      errorMessage = 'Error de permisos. Verifica las reglas de Firestore.';
+    } else if (error.message.includes('network')) {
+      errorMessage = 'Error de conexión. Verifica tu internet.';
+    }
+    
+    Alert.alert('❌ Error', errorMessage);
   } finally {
     setSaving(false);
   }
 };
+    // Agrega esto temporalmente en tu NewTripScreen
+    useEffect(() => {
+      console.log('🔐 Estado de autenticación:', auth.currentUser);
+    }, []);
+    
+    
 
   return (
     <View style={styles.container}>
@@ -289,6 +353,19 @@ const NewTripScreen = ({ navigation }) => {
           ) : (
             <Text style={styles.saveButtonText}>Guardar Viaje</Text>
           )}
+        </TouchableOpacity>
+        {/*Agrega esto temporalmente en NewTripScreen después del botón guardar*/}
+        <TouchableOpacity
+          style={[styles.saveButton, { backgroundColor: '#FF9800', marginTop: 10 }]}
+          onPress={() => {
+            console.log('🐛 DEBUG INFO:');
+            console.log('Usuario:', auth.currentUser);
+            console.log('Trip Data:', trip);
+            console.log('Items:', items);
+            Alert.alert('Debug', 'Revisa la consola para más información');
+          }}
+        >
+          <Text style={styles.saveButtonText}>Debug Info</Text>
         </TouchableOpacity>
       </ScrollView>
     </View>
