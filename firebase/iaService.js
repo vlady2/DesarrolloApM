@@ -36,7 +36,7 @@ export const getMaletasConItems = async (viajeId) => {
    ======================================================== */
 export const buscarItemConIA = async (pregunta, maletas) => {
   const groq = new Groq({
-    apiKey: process.env.EXPO_PUBLIC_GROQ_KEY,
+    apiKey: process.env.GROQ_API_KEY, //EXPO_PUBLIC_GROQ_KEY,
   });
 
   const systemMsg = `
