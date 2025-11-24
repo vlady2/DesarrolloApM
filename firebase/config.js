@@ -1,14 +1,17 @@
-// TODO: Add SDKs for Firebase products that you want to use
-// https://firebase.google.com/docs/web/setup#available-libraries
+// firebase/config.js - CONFIGURACIÓN CORRECTA
+import { initializeApp } from 'firebase/app';
 
-// Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: "AIzaSyDtXAbPU3c3zAEYFvKvk9ay9wVdK87oqvs",
-  authDomain: "ds-moviles-g01.firebaseapp.com",
-  projectId: "ds-moviles-g01",
-  storageBucket: "ds-moviles-g01.firebasestorage.app",
-  messagingSenderId: "872007438143",
-  appId: "1:872007438143:web:3709f58008d4bd6bf38d8a"
+  apiKey: "AIzaSyCs6fYq57iK0RzQDdBNqKbdQggvo5MQ0EI",
+  authDomain: "gmoviles-appfinal.firebaseapp.com",
+  projectId: "gmoviles-appfinal",
+  storageBucket: "gmoviles-appfinal.firebasestorage.app",
+  messagingSenderId: "779603830349",
+  appId: "1:779603830349:web:8308fa55b73cc95d4c5e04"
 };
 
+// Inicializar Firebase
+const app = initializeApp(firebaseConfig);
+
 export default firebaseConfig;
+export { app };

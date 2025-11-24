@@ -1,45 +1,27 @@
-//import { signOut } from "firebase/auth";
-import { Button, StyleSheet, Text, View } from "react-native";
-//import { auth } from "../../firebase/auth";
+import { StyleSheet, Text, View } from 'react-native';
 
-
-export default function ItemsInBoxScreen({navigation}) {
-
-    /*const handleLogout = async () => {
-        try {
-            if(auth.currentUser){
-                await signOut(auth);
-            alert("Sesión cerrada");
-            navigation.navigate("MainApp")
-            } else {
-                alert("No hay usuario activo para cerrar sesión")
-            }
-            
-        } catch (error) {
-            console.error("error al cerrar sesión: ", error);
-        }
-    };*/
-
-
+export default function ItemsInBoxScreen({ navigation }) {
     return (
         <View style={styles.content}>
             <Text style={styles.title}>Pantalla de cosas en la caja</Text>
             <Text style={styles.txtCloseSesion}>Cerrar Sesión</Text>
-            
         </View>
     );
 }
-//<Button title="Cerrar" onPress={handleLogout}/>
+
 const styles = StyleSheet.create({
     content: {
         flex: 1,
         alignItems: 'center',
-        justifyContent: 'center'
+        justifyContent: 'center',
+        backgroundColor: '#121212',
     },
-    title:{
+    title: {
         fontSize: 25,
+        color: '#FFFFFF',
     },
-    txtCloseSesion:{
+    txtCloseSesion: {
         fontSize: 25,
+        color: '#BB86FC',
     }
-})
+});
