@@ -12,7 +12,6 @@ import {
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { deleteTrip, getUserTrips } from '../../firebase/tripService';
 
-// Ignorar warnings específicos (opcional)
 LogBox.ignoreLogs([
   'SafeAreaView has been deprecated',
 ]);
@@ -23,17 +22,16 @@ const MyTripsScreen = ({ navigation }) => {
   const [hasError, setHasError] = useState(false);
   const [errorMessage, setErrorMessage] = useState('');
 
-  // Agrega esto al inicio del componente MyTripsScreen
-useEffect(() => {
-  console.log('🔍 DEBUG - Navigator info:');
-  console.log(' - Navigation object:', navigation);
-  console.log(' - Parent:', navigation.getParent());
-  console.log(' - Can navigate to TripDetail:', navigation.canGoBack());
-  
-  // Verificar rutas disponibles
-  const state = navigation.getState();
-  console.log(' - Current routes:', state?.routes?.map(r => r.name));
-}, [navigation]);
+  // DEBUG opcional
+  useEffect(() => {
+    console.log('🔍 DEBUG - Navigator info:');
+    console.log(' - Navigation object:', navigation);
+    console.log(' - Parent:', navigation.getParent());
+    console.log(' - Can navigate to TripDetail:', navigation.canGoBack());
+
+    const state = navigation.getState();
+    console.log(' - Current routes:', state?.routes?.map(r => r.name));
+  }, [navigation]);
 
   useEffect(() => {
     loadTrips();
@@ -62,8 +60,7 @@ useEffect(() => {
       console.log('🔍 Error completo:', error);
       
       setHasError(true);
-      
-      // ✅ MANEJO ESPECÍFICO DE ERRORES
+
       if (error.message.includes('índice') || error.code === 'failed-precondition') {
         setErrorMessage('Configuración de base de datos incompleta. Esto se solucionará automáticamente.');
       } else if (error.message.includes('permisos')) {
@@ -102,18 +99,14 @@ useEffect(() => {
     );
   };
 
-  // ✅ FUNCIONES CORREGIDAS DE NAVEGACIÓN
+  // NAVEGACIÓN CORREGIDA
   const navigateToTripDetail = (trip) => {
     console.log('🟡 Navegando a TripDetail...');
-    
-    // SOLUCIÓN: Navegación forzada al parent navigator
     navigation.getParent()?.navigate('TripDetail', { trip });
   };
 
   const navigateToEditTrip = (trip) => {
     console.log('🟡 Navegando a EditTrip...');
-    
-    // SOLUCIÓN: Navegación forzada al parent navigator
     navigation.getParent()?.navigate('EditTrip', { trip });
   };
 
@@ -139,6 +132,7 @@ useEffect(() => {
           ID: {item.id?.substring(0, 8)}...
         </Text>
       </View>
+
       <View style={styles.tripActions}>
         <TouchableOpacity 
           style={styles.actionButton}
