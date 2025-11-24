@@ -45,7 +45,7 @@ const HomeScreen = ({ navigation }) => {
       title: 'Configuración',
       icon: 'settings',
       color: '#9C27B0',
-      onPress: () => navigation.navigate('Config')
+      onPress: () => navigation.navigate('SettingScreen')
     }
   ];
 

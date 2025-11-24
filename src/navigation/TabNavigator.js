@@ -2,17 +2,13 @@ import { Ionicons, MaterialIcons } from '@expo/vector-icons';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { TouchableOpacity } from 'react-native';
 
-// import local screens
-import GenresScreen from '../screens/GenerosScreen';
-import StackNavigator from './StackNavigator';
 
-// Import nuevas pantallas de viajes
+
 import TravelHomeScreen from '../screens/HomeScreen';
 import NewMoveScreen from '../screens/NewMoveScreen';
 import NewTripScreen from '../screens/NewTripScreen';
 
-// Ambas importaciones del merge
-import MyTripsStackNavigator from './MyTripsStackNavigator'; // ← esta es la que realmente usas
+import MyTripsStackNavigator from './MyTripsStackNavigator';
 
 const Tab = createBottomTabNavigator();
 
@@ -24,7 +20,7 @@ const openDrawer = ({ navigation }) => {
     )
 }
 
-export default function TabNavigator({ navigation }) {
+export default function TabNavigator() {
     return (
         <Tab.Navigator
             screenOptions={{
@@ -32,17 +28,6 @@ export default function TabNavigator({ navigation }) {
                 tabBarInactiveTintColor: 'gray',
             }}
         >
-
-            <Tab.Screen 
-                name="MusicHome"
-                component={StackNavigator}
-                options={{
-                    headerShown: false,
-                    tabBarIcon: ({ color }) => (<MaterialIcons name='home' size={25} color={color} />),
-                    title: 'Música'
-                }}
-            />
-
             <Tab.Screen
                 name="TravelHome"
                 component={TravelHomeScreen}
@@ -55,7 +40,7 @@ export default function TabNavigator({ navigation }) {
 
             <Tab.Screen
                 name="MyTrips"
-                component={MyTripsStackNavigator} // ← FINAL DECISIÓN
+                component={MyTripsStackNavigator}
                 options={{
                     headerShown: false,
                     tabBarIcon: ({ color }) => (<Ionicons name='list' size={25} color={color} />),
@@ -83,14 +68,7 @@ export default function TabNavigator({ navigation }) {
                 }}
             />
 
-            <Tab.Screen
-                name="Genres"
-                component={GenresScreen}
-                options={{
-                    headerLeft: (() => (openDrawer({ navigation }))),
-                    tabBarIcon: ({ color }) => (<MaterialIcons name='music-note' size={25} color={color} />)
-                }}
-            />
+            
 
         </Tab.Navigator>
     );

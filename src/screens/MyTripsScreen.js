@@ -102,12 +102,11 @@ const MyTripsScreen = ({ navigation }) => {
   // NAVEGACIÓN CORREGIDA
   const navigateToTripDetail = (trip) => {
     console.log('🟡 Navegando a TripDetail...');
-    navigation.getParent()?.navigate('TripDetail', { trip });
-  };
+    navigation.navigate('TripDetail', { trip });  };
 
   const navigateToEditTrip = (trip) => {
     console.log('🟡 Navegando a EditTrip...');
-    navigation.getParent()?.navigate('EditTrip', { trip });
+    navigation.navigate('EditTrip', { trip });
   };
 
   const renderTripItem = ({ item }) => (

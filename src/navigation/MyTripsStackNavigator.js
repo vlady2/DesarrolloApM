@@ -7,41 +7,45 @@ import TripDetailScreen from '../screens/TripDetailScreen';
 
 const Stack = createNativeStackNavigator();
 
-const openDrawer = ({navigation}) => {
-    return(
-        <TouchableOpacity onPress={()=> navigation.openDrawer()}>
-            <MaterialIcons name='menu' size={25} color={"blue"}/>
+const OpenDrawerButton = ({ navigation }) => {
+    return (
+        <TouchableOpacity onPress={() => navigation.openDrawer()}>
+            <MaterialIcons name="menu" size={25} color="blue" />
         </TouchableOpacity>
-    )
-}
+    );
+};
 
 export default function MyTripsStackNavigator() {
     return (
         <Stack.Navigator>
-            <Stack.Screen 
+            
+            <Stack.Screen
                 name="MyTripsMain"
                 component={MyTripsScreen}
-                options={{
-                    title: 'Mis Viajes',
-                    headerLeft: (() => openDrawer({ navigation }))
-                }}
+                options={({ navigation }) => ({
+                    title: "Mis Viajes",
+                    headerLeft: () => <OpenDrawerButton navigation={navigation} />
+                })}
             />
-            <Stack.Screen 
+
+            <Stack.Screen
                 name="TripDetail"
                 component={TripDetailScreen}
-                options={{
-                    title: 'Detalle del Viaje',
-                    headerLeft: (() => openDrawer({ navigation }))
-                }}
+                options={({ navigation }) => ({
+                    title: "Detalle del Viaje",
+                    headerLeft: () => <OpenDrawerButton navigation={navigation} />
+                })}
             />
+
             <Stack.Screen
                 name="EditTrip"
                 component={EditTripScreen}
-                options={{
-                    title: 'Editar Viaje',
-                    headerLeft: (() => openDrawer({ navigation }))
-                }}
+                options={({ navigation }) => ({
+                    title: "Editar Viaje",
+                    headerLeft: () => <OpenDrawerButton navigation={navigation} />
+                })}
             />
+
         </Stack.Navigator>
     );
 }
