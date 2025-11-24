@@ -4,7 +4,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 // import local screens
 
 //----------------------------------
-// import LoginScreen from '../screens/auth_old_withNode/LoginScreen';
+// import LoginScreen from '../screeccccns/auth_old_withNode/LoginScreen';
 // import RegisterScreen from '../screens/auth_old_withNode/RegisterScreen';
 //----------------------------------------------
 import LoginScreen from '../screens/auth_users/LogInScreen';
