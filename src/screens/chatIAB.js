@@ -10,7 +10,7 @@ export default function chatIAB({ text, isUser }) {
         padding: 10,
         margin: 5,
         borderRadius: 15,
-        maxWidth: "80%",
+        maxWidth: "90%",
       }}
     >
       <Text style={{ color: isUser ? "white" : "black" }}>{text}</Text>
