@@ -7,6 +7,7 @@ import { TouchableOpacity } from 'react-native';
 
 // Import nuevas pantallas de viajes
 import EditTripScreen from '../screens/EditTripScreen';
+import HomeScreen from '../screens/HomeScreen';
 import ItemsInBoxScreen from '../screens/ItemsInBoxScreen';
 import NewMaletaScreen from '../screens/NewMaletaScreen';
 import NewMoveScreen from '../screens/NewMoveScreen';
@@ -74,6 +75,8 @@ export default function StackNavigator() {
 
 
            <Stack.Screen name="NewMaleta" component={NewMaletaScreen} />
+           <Stack.Screen name="Home" component={HomeScreen} />
+           
             
            
 

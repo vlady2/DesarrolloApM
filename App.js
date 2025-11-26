@@ -1,15 +1,19 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import 'react-native-gesture-handler';
 import LoginScreen from './src/screens/auth_users/LogInScreen';
 import RegisterScreen from './src/screens/auth_users/RegisterScreen';
 
 
 // Usa tu Drawer principal
-import DrawerNavigation from './src/navigation/DrawerNavigation';
+
 
 // Main Screens
 import EditTripScreen from './src/screens/EditTripScreen';
+import HomeScreen from './src/screens/HomeScreen';
+import MyTripsScreen from './src/screens/MyTripsScreen';
 import NewMaletaScreen from './src/screens/NewMaletaScreen';
+import NewTripScreen from './src/screens/NewTripScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
 
 
@@ -34,8 +38,8 @@ export default function App() {
 
         {/* Navegación principal */}
         <Stack.Screen 
-          name="Main" 
-          component={DrawerNavigation}
+          name="Home" 
+          component={HomeScreen}
           options={{ headerShown: false }}
         />
 
@@ -54,6 +58,17 @@ export default function App() {
         <Stack.Screen 
           name="TripDetail" 
           component={TripDetailScreen}
+          options={{ headerShown: false }}
+        />
+
+         <Stack.Screen 
+          name="MyTrips" 
+          component={MyTripsScreen}
+          options={{ headerShown: false }}
+        />
+         <Stack.Screen 
+          name="NewTrip" 
+          component={NewTripScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

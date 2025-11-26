@@ -37,7 +37,7 @@ export default function LoginScreen({ navigation }) {
       // Navegar al Home
       navigation.reset({
         index: 0,
-        routes: [{ name: 'Main' }],
+        routes: [{ name: 'Home' }],
       });
       
     } catch (error) {
