@@ -14,7 +14,9 @@ import HomeScreen from './src/screens/HomeScreen';
 import MyTripsScreen from './src/screens/MyTripsScreen';
 import NewMaletaScreen from './src/screens/NewMaletaScreen';
 import NewTripScreen from './src/screens/NewTripScreen';
+import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
+
 
 
 const Stack = createNativeStackNavigator();
@@ -69,6 +71,11 @@ export default function App() {
          <Stack.Screen 
           name="NewTrip" 
           component={NewTripScreen}
+          options={{ headerShown: false }}
+        />
+         <Stack.Screen 
+          name="Setting" 
+          component={SettingScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
