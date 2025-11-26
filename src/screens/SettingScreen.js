@@ -1,5 +1,6 @@
 import { signOut } from 'firebase/auth';
 import { Alert, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import { auth } from '../../firebase/auth';
 
 const SettingScreen = ({ navigation }) => {
@@ -62,7 +63,26 @@ const SettingScreen = ({ navigation }) => {
 
     return (
         <View style={styles.container}>
-            <Text style={styles.title}>Configuración</Text>
+            <View style={{
+                flexDirection: 'row',
+                alignItems: 'center',
+                justifyContent: 'center',
+                paddingVertical: 10
+            }}>
+
+                {/* Flecha a la izquierda */}
+                <TouchableOpacity
+                    onPress={() => navigation.goBack()}
+                    style={{ position: 'absolute', left: 0, paddingLeft: 10 }}
+                >
+                    <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+                </TouchableOpacity>
+
+                {/* Título centrado */}
+                <Text style={styles.title}>Configuración</Text>
+
+            </View>
+
             
             {/* Lista de opciones */}
             <View style={styles.menuContainer}>

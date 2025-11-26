@@ -8,9 +8,11 @@ import { TouchableOpacity } from 'react-native';
 // Import nuevas pantallas de viajes
 import EditTripScreen from '../screens/EditTripScreen';
 import ItemsInBoxScreen from '../screens/ItemsInBoxScreen';
+import NewMaletaScreen from '../screens/NewMaletaScreen';
 import NewMoveScreen from '../screens/NewMoveScreen';
 import NewTripScreen from '../screens/NewTripScreen';
 import TripDetailScreen from '../screens/TripDetailScreen';
+
 
 const Stack = createNativeStackNavigator();
 
@@ -51,6 +53,7 @@ export default function StackNavigator() {
                 })}
             />
 
+
             <Stack.Screen
                 name="TripDetail"
                 component={TripDetailScreen}
@@ -68,6 +71,11 @@ export default function StackNavigator() {
                     headerLeft: () => openDrawer({ navigation })
                 })}
             />
+
+
+           <Stack.Screen name="NewMaleta" component={NewMaletaScreen} />
+            
+           
 
         </Stack.Navigator>
     );

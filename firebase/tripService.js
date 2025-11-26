@@ -1,14 +1,14 @@
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    orderBy,
-    query,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { auth, db } from './auth';
 
@@ -79,6 +79,78 @@ export const saveTrip = async (tripData) => {
     }
     
     throw new Error(errorMessage);
+  }
+};
+
+// Guardar una maleta en un viaje
+export const saveMaleta = async (tripId, maletaData) => {
+  try {
+    console.log('🟡 Guardando maleta para viaje:', tripId);
+
+    // Verificar que el usuario esté autenticado
+    if (!auth) {
+      throw new Error('Error de configuración: Auth no disponible');
+    }
+
+    const user = auth.currentUser;
+    if (!user) {
+      throw new Error('Usuario no autenticado');
+    }
+
+    // Referencia a la subcolección 'maletas' del viaje
+    const maletasRef = collection(db, 'trips', tripId, 'maletas');
+    
+    const maletaConData = {
+      ...maletaData,
+      userId: user.uid, // Asignar el usuario actual
+      createdAt: new Date(),
+      updatedAt: new Date()
+    };
+
+    // Eliminar el campo 'id' si existe, ya que Firestore lo generará automáticamente
+    delete maletaConData.id;
+
+    const docRef = await addDoc(maletasRef, maletaConData);
+    console.log('🟢 Maleta guardada con ID:', docRef.id);
+    
+    return { id: docRef.id, ...maletaConData };
+  } catch (error) {
+    console.error('❌ Error guardando maleta:', error);
+    
+    let errorMessage = 'Error al guardar la maleta';
+    
+    if (error.code === 'permission-denied') {
+      errorMessage = 'No tienes permisos para escribir en Firestore. Verifica las reglas de seguridad.';
+    } else if (error.code === 'not-found') {
+      errorMessage = 'El viaje no existe.';
+    } else if (error.code === 'unavailable') {
+      errorMessage = 'Error de conexión. Verifica tu internet.';
+    }
+    
+    throw new Error(errorMessage);
+  }
+};
+
+// Obtener todas las maletas de un viaje
+export const getMaletasByTrip = async (tripId) => {
+  try {
+    console.log('🟡 Obteniendo maletas para viaje:', tripId);
+
+    const maletasRef = collection(db, 'trips', tripId, 'maletas');
+    const q = query(maletasRef, orderBy('createdAt', 'desc'));
+    
+    const querySnapshot = await getDocs(q);
+    const maletas = [];
+    
+    querySnapshot.forEach((doc) => {
+      maletas.push({ id: doc.id, ...doc.data() });
+    });
+
+    console.log('🟢 Maletas obtenidas:', maletas.length);
+    return maletas;
+  } catch (error) {
+    console.error('❌ Error obteniendo maletas:', error);
+    throw error;
   }
 };
 

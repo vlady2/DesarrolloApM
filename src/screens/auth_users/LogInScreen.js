@@ -31,7 +31,7 @@ export default function LoginScreen({ navigation }) {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
-      console.log('🟢 Sesión iniciada para:', user.email);
+      console.log('🟢 Sesión iniciada para: ', user.email);
       Alert.alert('Éxito', `Bienvenido ${user.displayName || user.email}`);
       
       // Navegar al Home

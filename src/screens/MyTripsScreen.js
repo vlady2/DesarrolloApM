@@ -2,83 +2,202 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  BackHandler,
   FlatList,
-  LogBox,
+  StatusBar,
   StyleSheet,
   Text,
   TouchableOpacity,
   View
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { getLuggageByTripId } from '../../firebase/luggageService';
 import { deleteTrip, getUserTrips } from '../../firebase/tripService';
-
-LogBox.ignoreLogs([
-  'SafeAreaView has been deprecated',
-]);
 
 const MyTripsScreen = ({ navigation }) => {
   const [trips, setTrips] = useState([]);
+  const [filteredTrips, setFilteredTrips] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [hasError, setHasError] = useState(false);
-  const [errorMessage, setErrorMessage] = useState('');
+  const [activeFilter, setActiveFilter] = useState('all');
+  const [luggageCounts, setLuggageCounts] = useState({});
+  
+  const insets = useSafeAreaInsets();
 
-  // DEBUG opcional
+  // ✅ SOLUCIÓN CORRECTA: Manejar solo el botón físico de Android
   useEffect(() => {
-    console.log('🔍 DEBUG - Navigator info:');
-    console.log(' - Navigation object:', navigation);
-    console.log(' - Parent:', navigation.getParent());
-    console.log(' - Can navigate to TripDetail:', navigation.canGoBack());
+    const backAction = () => {
+      // Solo manejar el back físico, no el navigation normal
+      if (navigation.isFocused()) {
+        navigation.navigate('Home');
+        return true; // Prevenir el comportamiento por defecto
+      }
+      return false;
+    };
 
-    const state = navigation.getState();
-    console.log(' - Current routes:', state?.routes?.map(r => r.name));
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
   }, [navigation]);
 
   useEffect(() => {
     loadTrips();
   }, []);
 
+  useEffect(() => {
+    filterTrips();
+  }, [trips, activeFilter]);
+
   const loadTrips = async () => {
     try {
       setLoading(true);
-      setHasError(false);
-      setErrorMessage('');
-      
-      console.log('🟡 Cargando viajes desde MyTripsScreen...');
       const userTrips = await getUserTrips();
-      
-      console.log('🟢 Viajes recibidos:', userTrips.length);
-      console.log('📋 Datos de viajes:', userTrips.map(trip => ({
-        id: trip.id,
-        destination: trip.destination,
-        itemCount: trip.itemCount
-      })));
-      
       setTrips(userTrips);
       
-    } catch (error) {
-      console.log('❌ Error cargando viajes:', error.message);
-      console.log('🔍 Error completo:', error);
+      await loadLuggageCounts(userTrips);
       
-      setHasError(true);
-
-      if (error.message.includes('índice') || error.code === 'failed-precondition') {
-        setErrorMessage('Configuración de base de datos incompleta. Esto se solucionará automáticamente.');
-      } else if (error.message.includes('permisos')) {
-        setErrorMessage('No tienes permisos para ver los viajes.');
-      } else if (error.message.includes('autenticado')) {
-        setErrorMessage('Debes iniciar sesión para ver tus viajes.');
-      } else {
-        setErrorMessage('Error al cargar los viajes: ' + error.message);
-      }
+    } catch (error) {
+      console.log('❌ Error cargando viajes:', error);
+      Alert.alert('Error', 'No se pudieron cargar los viajes');
     } finally {
       setLoading(false);
     }
   };
 
+  const loadLuggageCounts = async (tripsList) => {
+    const counts = {};
+    
+    for (const trip of tripsList) {
+      try {
+        const luggageList = await getLuggageByTripId(trip.id);
+        counts[trip.id] = luggageList.length; 
+      } catch (error) {
+        console.log(`❌ Error cargando maletas para viaje ${trip.id}:`, error);
+        counts[trip.id] = 0;
+      }
+    }
+    
+    setLuggageCounts(counts);
+  };
+
+  const filterTrips = () => {
+    if (activeFilter === 'all') {
+      setFilteredTrips(trips);
+    } else if (activeFilter === 'trips') {
+      const tripItems = trips.filter(trip => 
+        trip.type === 'viaje' || trip.type === 'trips'
+      );
+      setFilteredTrips(tripItems);
+    } else if (activeFilter === 'moving') {
+      const movingItems = trips.filter(trip => 
+        trip.type === 'mudanza' || trip.type === 'moving'
+      );
+      setFilteredTrips(movingItems);
+    }
+  };
+
+  // ✅ NUEVA FUNCIÓN: Calcular contadores
+  const getCounters = () => {
+    const totalTrips = trips.filter(trip => 
+      trip.type === 'viaje' || trip.type === 'trips'
+    ).length;
+    
+    const totalMovings = trips.filter(trip => 
+      trip.type === 'mudanza' || trip.type === 'moving'
+    ).length;
+    
+    const totalAll = trips.length;
+    
+    switch(activeFilter) {
+      case 'all':
+        return {
+          current: filteredTrips.length,
+          total: totalAll,
+          text: `${filteredTrips.length} de ${totalAll} elementos`
+        };
+      case 'trips':
+        return {
+          current: filteredTrips.length,
+          total: totalTrips,
+          text: `${filteredTrips.length} de ${totalTrips} viajes`
+        };
+      case 'moving':
+        return {
+          current: filteredTrips.length,
+          total: totalMovings,
+          text: `${filteredTrips.length} de ${totalMovings} mudanzas`
+        };
+      default:
+        return {
+          current: filteredTrips.length,
+          total: totalAll,
+          text: `${filteredTrips.length} de ${totalAll} elementos`
+        };
+    }
+  };
+
+  const getLuggageCount = (tripId) => {
+    return luggageCounts[tripId] || 0;
+  };
+
+  const getDisplayType = (trip) => {
+    const type = trip.type;
+    if (type === 'viaje' || type === 'trips') return 'trips';
+    if (type === 'mudanza' || type === 'moving') return 'moving';
+    return 'trips';
+  };
+
+  const getTripStatus = (trip) => {
+    if (!trip.startDate) return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
+    
+    const today = new Date();
+    let startDate, endDate;
+    
+    try {
+      if (trip.startDate.includes('/')) {
+        const [day, month, year] = trip.startDate.split('/');
+        startDate = new Date(year, month - 1, day);
+      } else {
+        startDate = new Date(trip.startDate);
+      }
+      
+      if (trip.endDate && trip.endDate.includes('/')) {
+        const [day, month, year] = trip.endDate.split('/');
+        endDate = new Date(year, month - 1, day);
+      } else if (trip.endDate) {
+        endDate = new Date(trip.endDate);
+      }
+    } catch (error) {
+      console.error('Error procesando fechas:', error);
+      return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
+    }
+    
+    if (isNaN(startDate.getTime())) {
+      return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
+    }
+    
+    if (today < startDate) {
+      return { status: 'Pendiente', color: '#FFA500', icon: 'time-outline' };
+    }
+    
+    if (endDate && !isNaN(endDate.getTime()) && today > endDate) {
+      return { status: 'Completado', color: '#888', icon: 'checkmark-done' };
+    }
+    
+    if (today >= startDate && (!endDate || today <= endDate)) {
+      return { status: 'En curso', color: '#4CAF50', icon: 'airplane' };
+    }
+    
+    return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
+  };
+
   const handleDeleteTrip = async (tripId, tripName) => {
     Alert.alert(
-      'Eliminar Viaje',
-      `¿Estás seguro de eliminar el viaje "${tripName}"?`,
+      'Eliminar',
+      `¿Estás seguro de eliminar "${tripName}"?`,
       [
         { text: 'Cancelar', style: 'cancel' },
         { 
@@ -87,10 +206,8 @@ const MyTripsScreen = ({ navigation }) => {
             try {
               await deleteTrip(tripId);
               setTrips(trips.filter(trip => trip.id !== tripId));
-              Alert.alert('Éxito', 'Viaje eliminado correctamente');
             } catch (error) {
-              console.log('Error eliminando viaje:', error.message);
-              Alert.alert('Error', 'No se pudo eliminar el viaje');
+              Alert.alert('Error', 'No se pudo eliminar');
             }
           },
           style: 'destructive'
@@ -99,113 +216,181 @@ const MyTripsScreen = ({ navigation }) => {
     );
   };
 
-  // NAVEGACIÓN CORREGIDA
+  // ✅ NAVEGACIÓN NORMAL - Sin replace
   const navigateToTripDetail = (trip) => {
-    console.log('🟡 Navegando a TripDetail...');
-    navigation.navigate('TripDetail', { trip });  };
-
-  const navigateToEditTrip = (trip) => {
-    console.log('🟡 Navegando a EditTrip...');
-    navigation.navigate('EditTrip', { trip });
+    navigation.navigate('TripDetail', { trip });
   };
 
-  const renderTripItem = ({ item }) => (
-    <TouchableOpacity 
-      style={styles.tripItem}
-      onPress={() => navigateToTripDetail(item)}
-    >
-      <View style={styles.tripInfo}>
-        <Text style={styles.tripDestination}>
-          {item.tripName || 'Viaje sin nombre'}
-        </Text>
-        <Text style={styles.tripDates}>
-          {item.startDate} {item.endDate ? `- ${item.endDate}` : ''}
-        </Text>
-        <Text style={styles.tripPurpose}>
-          {item.purpose || 'Sin propósito especificado'}
-        </Text>
-        <Text style={styles.tripItems}>
-          {item.itemCount || 0} artículo{item.itemCount !== 1 ? 's' : ''}
-        </Text>
-        <Text style={styles.tripId}>
-          ID: {item.id?.substring(0, 8)}...
-        </Text>
-      </View>
+  const navigateToEditTrip = (trip) => {
+    navigation.navigate('EditTrip', { 
+      trip, 
+    origin: 'MyTrips'});
 
-      <View style={styles.tripActions}>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => navigateToEditTrip(item)}
-        >
-          <Ionicons name="create" size={20} color="#2196F3" />
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.actionButton}
-          onPress={() => handleDeleteTrip(item.id, item.tripName || item.destination)}
-        >
-          <Ionicons name="trash" size={20} color="#F44336" />
-        </TouchableOpacity>
-      </View>
-    </TouchableOpacity>
-  );
+  };
+
+  const navigateToNewTrip = () => {
+    navigation.navigate('NewTrip');
+  };
+
+  // ✅ Botón de back personalizado - Navegación normal
+  const goBack = () => {
+    navigation.navigate('Home');
+  };
+
+  const renderTripItem = ({ item }) => {
+    const displayType = getDisplayType(item);
+    const tripStatus = getTripStatus(item);
+    const isMoving = displayType === 'moving';
+    const mainTitle = item.purpose || item.destination || (isMoving ? 'Mudanza' : 'Viaje');
+    const luggageCount = getLuggageCount(item.id);
+
+    return (
+      <TouchableOpacity 
+        style={styles.tripItem}
+        onPress={() => navigateToTripDetail(item)}
+      >
+        <View style={styles.tripHeader}>
+          <View style={[styles.typeBadge, isMoving && styles.movingBadge]}>
+            <Ionicons 
+              name={isMoving ? 'business' : 'airplane'} 
+              size={16} 
+              color={isMoving ? '#FF6B6B' : '#2196F3'} 
+            />
+            <Text style={[styles.typeText, isMoving && styles.movingText]}>
+              {isMoving ? 'Mudanza' : 'Viaje'}
+            </Text>
+          </View>
+          <View style={[styles.statusBadge, { backgroundColor: tripStatus.color }]}>
+            <Ionicons name={tripStatus.icon} size={12} color="#FFFFFF" />
+            <Text style={styles.statusText}>{tripStatus.status}</Text>
+          </View>
+        </View>
+
+        <View style={styles.tripInfo}>
+          <Text style={styles.tripTitle}>{mainTitle}</Text>
+          
+          {item.destination ? (
+            <View style={styles.destinationRow}>
+              <Ionicons name="location" size={14} color="#888" />
+              <Text style={styles.tripDestination}>{item.destination}</Text>
+            </View>
+          ) : null}
+
+          <View style={styles.datesRow}>
+            <Ionicons name="calendar" size={14} color="#888" />
+            <Text style={styles.tripDates}>
+              {item.startDate} {item.endDate ? `- ${item.endDate}` : ''}
+            </Text>
+          </View>
+
+          <View style={styles.footerRow}>
+            <View style={styles.luggageInfo}>
+              <Ionicons name="bag" size={14} color="#888" />
+              <Text style={styles.tripLuggage}>
+                {luggageCount} maleta{luggageCount !== 1 ? 's' : ''}
+              </Text>
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.tripActions}>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigateToEditTrip(item)}
+          >
+            <Ionicons name="create" size={20} color="#2196F3" />
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => handleDeleteTrip(item.id, mainTitle)}
+          >
+            <Ionicons name="trash" size={20} color="#F44336" />
+          </TouchableOpacity>
+        </View>
+      </TouchableOpacity>
+    );
+  };
 
   if (loading) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#BB86FC" />
-        <Text style={styles.loadingText}>Cargando viajes...</Text>
-        <Text style={styles.loadingSubtext}>Verificando base de datos...</Text>
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar backgroundColor="#121212" barStyle="light-content" />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#BB86FC" />
+          <Text style={styles.loadingText}>Cargando viajes...</Text>
+        </View>
       </View>
     );
   }
 
+  const counters = getCounters();
+
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingTop: insets.top }]}>
+      <StatusBar backgroundColor="#121212" barStyle="light-content" />
+      
+      {/* ✅ Header con navegación normal */}
       <View style={styles.header}>
-        <Text style={styles.headerTitle}>Mis Viajes</Text>
-        <Text style={styles.subtitle}>
-          {trips.length} viaje{trips.length !== 1 ? 's' : ''} guardado{trips.length !== 1 ? 's' : ''}
-        </Text>
+        <TouchableOpacity onPress={goBack}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle}>Mis Viajes & Mudanzas</Text>
+        <View style={styles.placeholder} />
       </View>
 
-      {hasError ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="warning" size={64} color="#FFA726" />
-          <Text style={styles.emptyText}>Error al cargar viajes</Text>
-          <Text style={styles.emptySubtext}>
-            {errorMessage}
-          </Text>
+      {/* ✅ CONTADOR DE ELEMENTOS */}
+      <View style={styles.counterContainer}>
+        <Text style={styles.counterText}>{counters.text}</Text>
+      </View>
+
+      <View style={styles.filterContainer}>
+        {['all', 'trips', 'moving'].map((filter) => (
           <TouchableOpacity 
-            style={styles.retryButton}
-            onPress={loadTrips}
+            key={filter}
+            style={[styles.filterButton, activeFilter === filter && styles.filterButtonActive]}
+            onPress={() => setActiveFilter(filter)}
           >
-            <Ionicons name="reload" size={16} color="#121212" />
-            <Text style={styles.retryButtonText}> Reintentar</Text>
+            {filter === 'trips' ? (
+              <Ionicons name="airplane" size={16} color={activeFilter === filter ? '#FFFFFF' : '#2196F3'} />
+            ) : filter === 'moving' ? (
+              <Ionicons name="business" size={16} color={activeFilter === filter ? '#FFFFFF' : '#FF6B6B'} />
+            ) : null}
+            <Text style={[styles.filterText, activeFilter === filter && styles.filterTextActive]}>
+              {filter === 'all' ? 'Todos' : filter === 'trips' ? 'Viajes' : 'Mudanzas'}
+            </Text>
           </TouchableOpacity>
-        </View>
-      ) : trips.length === 0 ? (
-        <View style={styles.emptyContainer}>
-          <Ionicons name="airplane" size={64} color="#666" />
-          <Text style={styles.emptyText}>No tienes viajes guardados</Text>
-          <Text style={styles.emptySubtext}>
-            Crea tu primer viaje usando el botón "+" en la pantalla principal
+        ))}
+      </View>
+
+      {filteredTrips.length === 0 ? (
+        <View style={styles.centerContainer}>
+          <Ionicons 
+            name={activeFilter === 'moving' ? 'business' : 'airplane'} 
+            size={64} 
+            color="#666" 
+          />
+          <Text style={styles.emptyText}>
+            {activeFilter === 'all' ? 'No tienes viajes ni mudanzas' : 
+             `No tienes ${activeFilter === 'trips' ? 'viajes' : 'mudanzas'} guardados`}
           </Text>
           <TouchableOpacity 
             style={styles.createButton}
-            onPress={() => navigation.navigate('NewTrip')}
+            onPress={navigateToNewTrip}
           >
-            <Text style={styles.createButtonText}>Crear Primer Viaje</Text>
+            <Text style={styles.createButtonText}>
+              Crear {activeFilter === 'moving' ? 'Mudanza' : 'Viaje'}
+            </Text>
           </TouchableOpacity>
         </View>
       ) : (
         <FlatList
-          data={trips}
+          data={filteredTrips}
           renderItem={renderTripItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
           refreshing={loading}
           onRefresh={loadTrips}
+          style={styles.flatList}
         />
       )}
     </View>
@@ -217,127 +402,197 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#121212',
   },
-  loadingContainer: {
+  centerContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  loadingText: {
-    color: '#FFFFFF',
-    marginTop: 10,
-    fontSize: 16,
-  },
-  loadingSubtext: {
-    color: '#888',
-    marginTop: 5,
-    fontSize: 12,
+    padding: 40,
   },
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
     borderBottomColor: '#333',
   },
   headerTitle: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
   },
-  subtitle: {
-    fontSize: 14,
+  placeholder: {
+    width: 24,
+  },
+  // ✅ NUEVO ESTILO: Contador
+  counterContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 15,
+    paddingBottom: 5,
+  },
+  counterText: {
+    fontSize: 16,
     color: '#BB86FC',
-    marginTop: 5,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  filterContainer: {
+    flexDirection: 'row',
+    padding: 15,
+    gap: 10,
+  },
+  filterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 20,
+    backgroundColor: '#1E1E1E',
+    gap: 6,
+  },
+  filterButtonActive: {
+    backgroundColor: '#2196F3',
+  },
+  filterText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  filterTextActive: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
   listContainer: {
-    padding: 10,
+    padding: 15,
+    paddingBottom: 20,
+  },
+  flatList: {
+    flex: 1,
   },
   tripItem: {
-    flexDirection: 'row',
     backgroundColor: '#1E1E1E',
-    marginBottom: 10,
-    padding: 15,
-    borderRadius: 10,
+    marginBottom: 15,
+    padding: 16,
+    borderRadius: 12,
+    borderLeftWidth: 4,
+    borderLeftColor: '#2196F3',
+  },
+  tripHeader: {
+    flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'flex-start',
+    alignItems: 'center',
+    marginBottom: 12,
+  },
+  typeBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2A2A2A',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  movingBadge: {
+    backgroundColor: '#2A2A2A',
+  },
+  typeText: {
+    fontSize: 12,
+    fontWeight: 'bold',
+    color: '#2196F3',
+  },
+  movingText: {
+    color: '#FF6B6B',
+  },
+  statusBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+    gap: 4,
+  },
+  statusText: {
+    color: '#FFFFFF',
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   tripInfo: {
     flex: 1,
   },
-  tripDestination: {
-    fontSize: 18,
+  tripTitle: {
+    fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 5,
+    marginBottom: 8,
+  },
+  destinationRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 6,
+  },
+  tripDestination: {
+    fontSize: 14,
+    color: '#888',
+  },
+  datesRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+    gap: 6,
   },
   tripDates: {
     fontSize: 14,
     color: '#BB86FC',
-    marginBottom: 3,
   },
-  tripPurpose: {
-    fontSize: 14,
-    color: '#888',
-    marginBottom: 3,
+  footerRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
-  tripItems: {
+  luggageInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  tripLuggage: {
     fontSize: 12,
-    color: '#4CAF50',
-    marginBottom: 2,
-  },
-  tripId: {
-    fontSize: 10,
-    color: '#666',
-    fontFamily: 'monospace',
+    color: '#FF9800',
+    fontWeight: '500',
   },
   tripActions: {
     flexDirection: 'row',
-    gap: 10,
-    marginLeft: 10,
+    justifyContent: 'flex-end',
+    gap: 15,
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: 1,
+    borderTopColor: '#333',
   },
   actionButton: {
     padding: 8,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 40,
   },
   emptyText: {
     fontSize: 18,
     color: '#FFFFFF',
     textAlign: 'center',
     marginTop: 20,
-    marginBottom: 10,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    color: '#888',
-    textAlign: 'center',
-    lineHeight: 20,
     marginBottom: 20,
-  },
-  retryButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#BB86FC',
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 8,
-  },
-  retryButtonText: {
-    color: '#121212',
-    fontWeight: 'bold',
   },
   createButton: {
     backgroundColor: '#4CAF50',
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 8,
-    marginTop: 10,
   },
   createButtonText: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    marginTop: 10,
+    fontSize: 16,
   },
 });
 

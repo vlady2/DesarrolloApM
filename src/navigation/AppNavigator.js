@@ -22,6 +22,7 @@ export default function AppNavigator() {
                 <Stack.Screen name='Login' component={LoginScreen} />
                 <Stack.Screen name='Register' component={RegisterScreen} />
                 <Stack.Screen name='MainApp' component={DrawerNavigation} />
+                <Stack.Screen name="NewMaleta" component={NewMaletaScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );
