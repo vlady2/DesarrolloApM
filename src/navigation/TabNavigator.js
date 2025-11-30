@@ -8,6 +8,7 @@ import TravelHomeScreen from '../screens/HomeScreen';
 import NewMoveScreen from '../screens/NewMoveScreen';
 import NewTripScreen from '../screens/NewTripScreen';
 
+
 import MyTripsStackNavigator from './MyTripsStackNavigator';
 
 const Tab = createBottomTabNavigator();
