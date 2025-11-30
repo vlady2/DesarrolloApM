@@ -68,7 +68,7 @@ const HomeScreen = ({ navigation }) => {
       title: 'Artículos Prohibidos',
       icon: 'warning',
       color: '#F44336',
-      onPress: () => navigation.navigate('ArticulosProhibidosScreen')
+      onPress: () => navigation.navigate('ArticulosProhibidos')
     },
     {
       title: 'Configuración',
@@ -80,7 +80,7 @@ const HomeScreen = ({ navigation }) => {
       title: 'Mis Maletas / Cajas',
       icon: 'briefcase',
       color: '#2196F3',
-      onPress: () => navigation.navigate('ItemsInBox')
+      onPress: () => navigation.navigate('Box')
     }
   ];
 

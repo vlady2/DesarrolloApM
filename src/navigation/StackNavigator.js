@@ -8,7 +8,7 @@ import { TouchableOpacity } from 'react-native';
 // Import nuevas pantallas de viajes
 import EditTripScreen from '../screens/EditTripScreen';
 import HomeScreen from '../screens/HomeScreen';
-import ItemsInBoxScreen from '../screens/ItemsInBoxScreen';
+import ItemsInBoxScreen from '../screens/Maletascreen';
 import NewMaletaScreen from '../screens/NewMaletaScreen';
 import NewMoveScreen from '../screens/NewMoveScreen';
 import NewTripScreen from '../screens/NewTripScreen';

@@ -5,23 +5,21 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
-  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { auth } from '../../firebase/auth';
-import { getTripById, updateTrip } from '../../firebase/tripService';
+import { getTripById, getUserTrips, updateTrip } from '../../firebase/tripService';
 
 const EditTripScreen = ({ route, navigation }) => {
-  const { trip, origin = 'TripDetail' } = route.params; // 👈 ORIGEN CON VALOR POR DEFECTO
+  const { trip, origin = 'TripDetail' } = route.params;
   
   const [editedTrip, setEditedTrip] = useState({
     destination: trip.destination || '',
@@ -35,16 +33,15 @@ const EditTripScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState('start');
-  const [selectedDate, setSelectedDate] = useState(new Date());
+  const [existingTrips, setExistingTrips] = useState([]);
   
   const insets = useSafeAreaInsets();
 
-  // ✅ CORREGIDO: BackHandler INTELIGENTE según el origen
   useEffect(() => {
     const backAction = () => {
       if (navigation.isFocused()) {
         handleGoBack();
-        return true; // Prevenir el comportamiento por defecto
+        return true;
       }
       return false;
     };
@@ -55,33 +52,40 @@ const EditTripScreen = ({ route, navigation }) => {
     );
 
     return () => backHandler.remove();
-  }, [navigation, trip, origin]); // 👈 INCLUIR ORIGEN EN LAS DEPENDENCIAS
+  }, [navigation, trip, origin]);
 
-  // ✅ CORREGIDO: Función de navegación INTELIGENTE
-  const handleGoBack = () => {
-    console.log('🟡 Navegando desde EditTrip - Origen:', origin);
-    
-    switch(origin) {
-      case 'MyTrips':
-        console.log('🔵 Regresando a MyTrips');
-        navigation.navigate('MyTrips');
-        break;
-      case 'TripDetail':
-        console.log('🔵 Regresando a TripDetail');
-        navigation.navigate('TripDetail', { trip });
-        break;
-      default:
-        console.log('🔵 Regresando a TripDetail (default)');
-        navigation.navigate('TripDetail', { trip });
-    }
-  };
-
-  // Cargar datos actualizados si es necesario
   useEffect(() => {
     if (trip.id) {
       loadTripData();
     }
+    loadExistingTrips();
   }, [trip.id]);
+
+  const loadExistingTrips = async () => {
+    try {
+      if (auth.currentUser) {
+        const trips = await getUserTrips();
+        // Filtrar el viaje actual para no compararlo consigo mismo
+        const otherTrips = trips.filter(t => t.id !== trip.id);
+        setExistingTrips(otherTrips);
+      }
+    } catch (error) {
+      console.log('Error cargando viajes existentes:', error);
+    }
+  };
+
+  const handleGoBack = () => {
+    switch(origin) {
+      case 'MyTrips':
+        navigation.navigate('MyTrips');
+        break;
+      case 'TripDetail':
+        navigation.navigate('TripDetail', { trip });
+        break;
+      default:
+        navigation.navigate('TripDetail', { trip });
+    }
+  };
 
   const loadTripData = async () => {
     try {
@@ -104,44 +108,189 @@ const EditTripScreen = ({ route, navigation }) => {
     }
   };
 
-  // Función para formatear fecha
+  // ✅ FUNCIONES DE MANEJO DE FECHAS CONSISTENTES (igual que en NewTripScreen)
   const formatDate = (date) => {
-    const day = date.getDate().toString().padStart(2, '0');
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const year = date.getFullYear();
+    const utcDate = new Date(Date.UTC(
+      date.getFullYear(),
+      date.getMonth(),
+      date.getDate()
+    ));
+    
+    const day = utcDate.getUTCDate().toString().padStart(2, '0');
+    const month = (utcDate.getUTCMonth() + 1).toString().padStart(2, '0');
+    const year = utcDate.getUTCFullYear();
     return `${day}/${month}/${year}`;
   };
 
-  // Manejar selección de fecha
+  const getToday = () => {
+    const now = new Date();
+    const today = new Date(Date.UTC(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate()
+    ));
+    return today;
+  };
+
+  const parseDateString = (dateString) => {
+    if (!dateString) return null;
+    
+    const parts = dateString.split('/');
+    if (parts.length !== 3) return null;
+    
+    const day = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const year = parseInt(parts[2], 10);
+    
+    return new Date(Date.UTC(year, month, day));
+  };
+
   const handleDateChange = (event, selectedDate) => {
     setShowDatePicker(false);
     
-    if (selectedDate) {
+    if (event.type === 'set' && selectedDate) {
       const formattedDate = formatDate(selectedDate);
       
       if (datePickerMode === 'start') {
         setEditedTrip({...editedTrip, startDate: formattedDate});
+        
+        // Si la fecha de fin es anterior a la nueva fecha de inicio, limpiarla
+        if (editedTrip.endDate) {
+          const endDate = parseDateString(editedTrip.endDate);
+          const startDate = parseDateString(formattedDate);
+          
+          if (endDate && startDate && endDate < startDate) {
+            setEditedTrip(prev => ({ ...prev, endDate: '' }));
+          }
+        }
       } else {
         setEditedTrip({...editedTrip, endDate: formattedDate});
       }
     }
   };
 
-  // Abrir date picker para fecha de inicio
   const openStartDateCalendar = () => {
     setDatePickerMode('start');
-    setSelectedDate(editedTrip.startDate ? new Date(editedTrip.startDate.split('/').reverse().join('-')) : new Date());
     setShowDatePicker(true);
   };
 
-  // Abrir date picker para fecha de fin
   const openEndDateCalendar = () => {
     setDatePickerMode('end');
-    setSelectedDate(editedTrip.endDate ? new Date(editedTrip.endDate.split('/').reverse().join('-')) : new Date());
     setShowDatePicker(true);
   };
 
-  // Selección de destino (igual que en NewTripScreen)
+  const getCurrentDateForPicker = () => {
+    if (datePickerMode === 'start' && editedTrip.startDate) {
+      return parseDateString(editedTrip.startDate) || new Date();
+    } else if (datePickerMode === 'end' && editedTrip.endDate) {
+      return parseDateString(editedTrip.endDate) || new Date();
+    }
+    return new Date();
+  };
+
+  const getMinimumDateForPicker = () => {
+    if (datePickerMode === 'start') {
+      return getToday();
+    } else {
+      return editedTrip.startDate 
+        ? parseDateString(editedTrip.startDate)
+        : getToday();
+    }
+  };
+
+  // ✅ FUNCIÓN DE VALIDACIÓN DE SOLAPAMIENTO
+  const checkDateOverlap = (startDate, endDate) => {
+    if (!startDate || !endDate) return { hasOverlap: false };
+    
+    const newStart = parseDateString(startDate);
+    const newEnd = parseDateString(endDate);
+    
+    for (const existingTrip of existingTrips) {
+      if (existingTrip.startDate && existingTrip.endDate) {
+        const existingStart = parseDateString(existingTrip.startDate);
+        const existingEnd = parseDateString(existingTrip.endDate);
+        
+        const overlap = (newStart <= existingEnd && newEnd >= existingStart);
+        
+        if (overlap) {
+          return {
+            hasOverlap: true,
+            conflictingTrip: existingTrip,
+            type: getOverlapType(newStart, newEnd, existingStart, existingEnd)
+          };
+        }
+      }
+    }
+    
+    return { hasOverlap: false };
+  };
+
+  const getOverlapType = (newStart, newEnd, existingStart, existingEnd) => {
+    if (newStart.getTime() === existingStart.getTime() && newEnd.getTime() === existingEnd.getTime()) {
+      return 'identical';
+    } else if (newStart >= existingStart && newEnd <= existingEnd) {
+      return 'within';
+    } else if (newStart <= existingStart && newEnd >= existingEnd) {
+      return 'contains';
+    } else {
+      return 'overlap';
+    }
+  };
+
+  // ✅ FUNCIÓN DE VALIDACIÓN COMPLETA
+  const validateAllDateRestrictions = () => {
+    if (!editedTrip.startDate || !editedTrip.endDate) {
+      return true;
+    }
+
+    const today = getToday();
+    const startDate = parseDateString(editedTrip.startDate);
+    const endDate = parseDateString(editedTrip.endDate);
+
+    if (!startDate || !endDate) {
+      Alert.alert('Error', 'Formato de fecha inválido');
+      return false;
+    }
+
+    // Validar que la fecha de inicio no sea pasada
+    if (startDate < today) {
+      Alert.alert('Error', 'La fecha de inicio no puede ser una fecha pasada.');
+      return false;
+    }
+
+    // Validar fecha de fin no sea anterior a inicio
+    if (endDate < startDate) {
+      Alert.alert('Error', 'La fecha de fin no puede ser anterior a la fecha de inicio.');
+      return false;
+    }
+
+    // Validar solapamiento con viajes existentes
+    const overlapCheck = checkDateOverlap(editedTrip.startDate, editedTrip.endDate);
+    if (overlapCheck.hasOverlap) {
+      let message = '';
+      
+      switch (overlapCheck.type) {
+        case 'identical':
+          message = 'Ya tienes un viaje con fechas idénticas. Por favor elige otras fechas.';
+          break;
+        case 'within':
+          message = 'Este viaje está completamente dentro de las fechas de otro viaje existente. Elige fechas que no coincidan.';
+          break;
+        case 'contains':
+          message = 'Este viaje contiene completamente a otro viaje existente. Elige fechas que no coincidan.';
+          break;
+        case 'overlap':
+          message = 'Las fechas de este viaje coinciden con un viaje existente. Por favor elige otras fechas.';
+          break;
+      }
+      
+      Alert.alert('Conflicto de Fechas', message);
+      return false;
+    }
+
+    return true;
+  };
+
   const openMap = async () => {
     try {
       let { status } = await Location.requestForegroundPermissionsAsync();
@@ -199,13 +348,12 @@ const EditTripScreen = ({ route, navigation }) => {
     }
   };
 
-  // Validar fechas
   const validateDates = () => {
     if (editedTrip.startDate && editedTrip.endDate) {
-      const start = new Date(editedTrip.startDate.split('/').reverse().join('-'));
-      const end = new Date(editedTrip.endDate.split('/').reverse().join('-'));
+      const start = parseDateString(editedTrip.startDate);
+      const end = parseDateString(editedTrip.endDate);
       
-      if (end < start) {
+      if (end && start && end < start) {
         Alert.alert('Error', 'La fecha de fin no puede ser anterior a la fecha de inicio');
         setEditedTrip({...editedTrip, endDate: ''});
         return false;
@@ -218,38 +366,42 @@ const EditTripScreen = ({ route, navigation }) => {
     validateDates();
   }, [editedTrip.startDate, editedTrip.endDate]);
 
-  // ✅ CORREGIDO: Función de actualización MEJORADA con navegación inteligente
+  // ✅ FUNCIÓN PARA AGREGAR MALETAS
+  const handleAddLuggage = () => {
+    navigation.navigate('NewMaleta', { 
+      tripId: trip.id,
+      destination: editedTrip.destination,
+      purpose: editedTrip.purpose,
+      origin: 'EditTrip'
+    });
+  };
+
   const updateTripInFirebase = async () => {
-    console.log('🟡 Botón presionado - Iniciando actualización...');
-    console.log('📍 Origen de navegación:', origin);
-    
-    // Validación de campos obligatorios
     if (!editedTrip.destination) {
-      console.log('❌ Validación fallida: destino vacío');
       Alert.alert('Error', 'Por favor selecciona un destino');
       return;
     }
 
     if (!editedTrip.startDate) {
-      console.log('❌ Validación fallida: fecha de inicio vacía');
       Alert.alert('Error', 'Por favor selecciona una fecha de inicio');
       return;
     }
+    
+    if (!editedTrip.endDate) {
+      Alert.alert('Error', 'Por favor selecciona una fecha de fin');
+      return;
+    }
 
-    if (!validateDates()) {
-      console.log('❌ Validación fallida: fechas inválidas');
+    // ✅ AGREGAR VALIDACIÓN DE SOLAPAMIENTO
+    if (!validateAllDateRestrictions()) {
       return;
     }
 
     if (!auth.currentUser) {
-      console.log('❌ Validación fallida: usuario no autenticado');
       Alert.alert('Error', 'Debes iniciar sesión para editar viajes');
       return;
     }
 
-    console.log('🔵 Todas las validaciones pasadas - Actualizando viaje:', trip.id);
-    console.log('📝 Datos a actualizar:', editedTrip);
-    
     setSaving(true);
     
     try {
@@ -263,13 +415,8 @@ const EditTripScreen = ({ route, navigation }) => {
         updatedAt: new Date()
       };
 
-      console.log('🟡 Enviando datos a Firebase...', tripData);
-      
-      // ✅ LLAMADA DIRECTA A updateTrip
       await updateTrip(trip.id, tripData);
-      console.log('🟢 Viaje actualizado correctamente en Firebase');
       
-      // ✅ CORREGIDO: Navegación INTELIGENTE según el origen
       Alert.alert(
         '✅ Éxito', 
         'Viaje actualizado correctamente',
@@ -277,15 +424,10 @@ const EditTripScreen = ({ route, navigation }) => {
           {
             text: 'OK',
             onPress: () => {
-              console.log('🟡 Navegando según origen:', origin);
-              
-              // Navegar según el origen
               if (origin === 'MyTrips') {
-                console.log('🔵 Navegando a MyTrips');
                 navigation.navigate('MyTrips');
               } else {
-                console.log('🔵 Navegando a TripDetail');
-                navigation.navigate('TripDetail', { trip: { ...trip, ...editedTrip } });
+                navigation.navigate('TripDetail', { trip: { ...trip, ...tripData } });
               }
             }
           }
@@ -293,11 +435,9 @@ const EditTripScreen = ({ route, navigation }) => {
       );
       
     } catch (error) {
-      console.error('❌ Error completo actualizando viaje:', error);
-      console.error('❌ Mensaje de error:', error.message);
-      console.error('❌ Stack:', error.stack);
+      console.error('❌ Error actualizando viaje:', error);
       
-      let errorMessage = 'No se pudo actualizar el viaje. Error desconocido.';
+      let errorMessage = 'No se pudo actualizar el viaje.';
       
       if (error.message) {
         if (error.message.includes('permission')) {
@@ -306,14 +446,11 @@ const EditTripScreen = ({ route, navigation }) => {
           errorMessage = 'Error de conexión. Verifica tu internet.';
         } else if (error.message.includes('not-found')) {
           errorMessage = 'El viaje no existe o fue eliminado.';
-        } else {
-          errorMessage = `Error: ${error.message}`;
         }
       }
       
       Alert.alert('❌ Error', errorMessage);
     } finally {
-      console.log('🔵 Finalizando proceso de guardado...');
       setSaving(false);
     }
   };
@@ -334,7 +471,6 @@ const EditTripScreen = ({ route, navigation }) => {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
       
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={handleGoBack}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
@@ -347,7 +483,6 @@ const EditTripScreen = ({ route, navigation }) => {
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Información del Viaje</Text>
           
-          {/* Selector de Destino */}
           <TouchableOpacity style={styles.inputWithIcon} onPress={openMap}>
             <Text style={editedTrip.destination ? styles.inputText : styles.placeholderText}>
               {editedTrip.destination || 'Seleccionar destino *'}
@@ -355,7 +490,6 @@ const EditTripScreen = ({ route, navigation }) => {
             <Ionicons name="map-outline" size={20} color="#BB86FC" />
           </TouchableOpacity>
           
-          {/* Selector de Fecha de Inicio */}
           <TouchableOpacity style={styles.inputWithIcon} onPress={openStartDateCalendar}>
             <Text style={editedTrip.startDate ? styles.inputText : styles.placeholderText}>
               {editedTrip.startDate || 'Fecha de inicio *'}
@@ -363,15 +497,13 @@ const EditTripScreen = ({ route, navigation }) => {
             <Ionicons name="calendar-outline" size={20} color="#BB86FC" />
           </TouchableOpacity>
           
-          {/* Selector de Fecha de Fin */}
           <TouchableOpacity style={styles.inputWithIcon} onPress={openEndDateCalendar}>
             <Text style={editedTrip.endDate ? styles.inputText : styles.placeholderText}>
-              {editedTrip.endDate || 'Fecha de fin'}
+              {editedTrip.endDate || 'Fecha de fin *'}
             </Text>
             <Ionicons name="calendar-outline" size={20} color="#BB86FC" />
           </TouchableOpacity>
           
-          {/* Propósito */}
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Propósito del viaje (vacaciones, trabajo, etc.)"
@@ -383,15 +515,15 @@ const EditTripScreen = ({ route, navigation }) => {
           />
         </View>
 
-        {/* Información */}
-        <View style={styles.infoSection}>
+        {/* ✅ BOTÓN PARA AGREGAR MALETAS */}
+         <View style={styles.infoSection}>
           <Ionicons name="information-circle-outline" size={20} color="#BB86FC" />
           <Text style={styles.infoText}>
             Los artículos se gestionan en la sección de maletas.
+            {existingTrips.length > 0 && '\n\n⚠️ Las fechas no deben coincidir con otros viajes existentes.'}
           </Text>
         </View>
 
-        {/* ✅ BOTÓN ACTUALIZAR */}
         <TouchableOpacity 
           style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
           onPress={updateTripInFirebase}
@@ -407,40 +539,20 @@ const EditTripScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Date Picker Modal */}
       {showDatePicker && (
-        <Modal transparent animationType="slide" visible={showDatePicker}>
-          <TouchableWithoutFeedback onPress={() => setShowDatePicker(false)}>
-            <View style={styles.modalOverlay}>
-              <TouchableWithoutFeedback>
-                <View style={styles.datePickerContainer}>
-                  <Text style={styles.datePickerTitle}>
-                    Seleccionar {datePickerMode === 'start' ? 'Fecha de Inicio' : 'Fecha de Fin'}
-                  </Text>
-                  <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="spinner"
-                    onChange={handleDateChange}
-                    style={styles.datePicker}
-                  />
-                  <TouchableOpacity 
-                    style={styles.datePickerButton}
-                    onPress={() => setShowDatePicker(false)}
-                  >
-                    <Text style={styles.datePickerButtonText}>Listo</Text>
-                  </TouchableOpacity>
-                </View>
-              </TouchableWithoutFeedback>
-            </View>
-          </TouchableWithoutFeedback>
-        </Modal>
+        <DateTimePicker
+          value={getCurrentDateForPicker()}
+          mode="date"
+          display="default"
+          onChange={handleDateChange}
+          minimumDate={getMinimumDateForPicker()}
+          style={styles.datePicker}
+        />
       )}
     </View>
   );
 };
 
-// Los estilos se mantienen igual...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -478,6 +590,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   formSection: {
+    marginBottom: 30,
+  },
+  luggageSection: {
     marginBottom: 30,
   },
   sectionTitle: {
@@ -519,6 +634,27 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
+  // ✅ ESTILOS PARA BOTÓN DE MALETAS
+  luggageButton: {
+    backgroundColor: '#BB86FC',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    gap: 10,
+  },
+  luggageButtonText: {
+    color: '#121212',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  luggageInfo: {
+    color: '#888',
+    fontSize: 14,
+    textAlign: 'center',
+  },
   infoSection: {
     flexDirection: 'row',
     alignItems: 'flex-start',
@@ -551,41 +687,8 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  datePickerContainer: {
-    backgroundColor: '#1E1E1E',
-    borderRadius: 15,
-    padding: 20,
-    width: '90%',
-    alignItems: 'center',
-  },
-  datePickerTitle: {
-    color: '#FFFFFF',
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 15,
-  },
   datePicker: {
-    width: '100%',
-    height: 200,
     backgroundColor: '#1E1E1E',
-  },
-  datePickerButton: {
-    backgroundColor: '#BB86FC',
-    paddingHorizontal: 30,
-    paddingVertical: 12,
-    borderRadius: 10,
-    marginTop: 15,
-  },
-  datePickerButtonText: {
-    color: '#FFFFFF',
-    fontSize: 16,
-    fontWeight: 'bold',
   },
 });
 

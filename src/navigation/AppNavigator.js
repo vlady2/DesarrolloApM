@@ -7,6 +7,7 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 // import LoginScreen from '../screeccccns/auth_old_withNode/LoginScreen';
 // import RegisterScreen from '../screens/auth_old_withNode/RegisterScreen';
 //----------------------------------------------
+import ArticulosProhibidosScreen from '../screens/ArticulosProhibidosScreen';
 import LoginScreen from '../screens/auth_users/LogInScreen';
 import RegisterScreen from '../screens/auth_users/RegisterScreen';
 //------------------------------------------------
@@ -23,6 +24,7 @@ export default function AppNavigator() {
                 <Stack.Screen name='Register' component={RegisterScreen} />
                 <Stack.Screen name='MainApp' component={DrawerNavigation} />
                 <Stack.Screen name="NewMaleta" component={NewMaletaScreen} />
+                 <Stack.Screen name="ArticulosProhibidosScreen" component={ArticulosProhibidosScreen} />
             </Stack.Navigator>
         </NavigationContainer>
     );

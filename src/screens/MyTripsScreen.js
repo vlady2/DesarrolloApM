@@ -15,11 +15,115 @@ import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getLuggageByTripId } from '../../firebase/luggageService';
 import { deleteTrip, getUserTrips } from '../../firebase/tripService';
 
+// ✅ FUNCIÓN CENTRAL MEJORADA: Verificar estado del viaje con permisos
+const getTripStatus = (trip) => {
+  if (!trip.startDate) {
+    return { 
+      status: 'Planificado', 
+      color: '#FFA500', 
+      icon: 'calendar-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  const today = new Date();
+  let startDate, endDate;
+  
+  try {
+    if (trip.startDate.includes('/')) {
+      const [day, month, year] = trip.startDate.split('/');
+      startDate = new Date(year, month - 1, day);
+    } else {
+      startDate = new Date(trip.startDate);
+    }
+    
+    if (trip.endDate && trip.endDate.includes('/')) {
+      const [day, month, year] = trip.endDate.split('/');
+      endDate = new Date(year, month - 1, day);
+    } else if (trip.endDate) {
+      endDate = new Date(trip.endDate);
+    }
+  } catch (error) {
+    return { 
+      status: 'Planificado', 
+      color: '#FFA500', 
+      icon: 'calendar-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  if (isNaN(startDate.getTime())) {
+    return { 
+      status: 'Planificado', 
+      color: '#FFA500', 
+      icon: 'calendar-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  if (today < startDate) {
+    return { 
+      status: 'Pendiente', 
+      color: '#FFA500', 
+      icon: 'time-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  if (endDate && !isNaN(endDate.getTime()) && today > endDate) {
+    return { 
+      status: 'Completado', 
+      color: '#888', 
+      icon: 'checkmark-done', 
+      canEdit: false, 
+      canDelete: false,
+      canEditLuggage: false,
+      canDeleteLuggage: false
+    };
+  }
+  
+  if (today >= startDate && (!endDate || today <= endDate)) {
+    return { 
+      status: 'En curso', 
+      color: '#4CAF50', 
+      icon: 'airplane', 
+      canEdit: false, 
+      canDelete: false,
+      canEditLuggage: false,
+      canDeleteLuggage: false
+    };
+  }
+  
+  return { 
+    status: 'Planificado', 
+    color: '#FFA500', 
+    icon: 'calendar-outline', 
+    canEdit: true, 
+    canDelete: true,
+    canEditLuggage: true,
+    canDeleteLuggage: true
+  };
+};
+
 const MyTripsScreen = ({ navigation }) => {
   const [trips, setTrips] = useState([]);
   const [filteredTrips, setFilteredTrips] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all');
+  const [activeStatusFilter, setActiveStatusFilter] = useState('all');
+  const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [luggageCounts, setLuggageCounts] = useState({});
   
   const insets = useSafeAreaInsets();
@@ -49,7 +153,7 @@ const MyTripsScreen = ({ navigation }) => {
 
   useEffect(() => {
     filterTrips();
-  }, [trips, activeFilter]);
+  }, [trips, activeFilter, activeStatusFilter]);
 
   const loadTrips = async () => {
     try {
@@ -83,23 +187,75 @@ const MyTripsScreen = ({ navigation }) => {
     setLuggageCounts(counts);
   };
 
+  // ✅ FUNCIÓN MEJORADA: Filtrar por tipo y estado
   const filterTrips = () => {
-    if (activeFilter === 'all') {
-      setFilteredTrips(trips);
-    } else if (activeFilter === 'trips') {
-      const tripItems = trips.filter(trip => 
+    let filtered = [...trips];
+
+    // Primero filtrar por tipo (viaje/mudanza)
+    if (activeFilter === 'trips') {
+      filtered = filtered.filter(trip => 
         trip.type === 'viaje' || trip.type === 'trips'
       );
-      setFilteredTrips(tripItems);
     } else if (activeFilter === 'moving') {
-      const movingItems = trips.filter(trip => 
+      filtered = filtered.filter(trip => 
         trip.type === 'mudanza' || trip.type === 'moving'
       );
-      setFilteredTrips(movingItems);
+    }
+
+    // Luego filtrar por estado
+    if (activeStatusFilter !== 'all') {
+      filtered = filtered.filter(trip => {
+        const tripStatus = getTripStatusForItem(trip);
+        return tripStatus.status.toLowerCase() === activeStatusFilter.toLowerCase();
+      });
+    }
+
+    setFilteredTrips(filtered);
+  };
+
+  // ✅ NUEVA FUNCIÓN: Obtener contador para estados
+  const getStatusCount = (status) => {
+    return trips.filter(trip => {
+      const tripStatus = getTripStatusForItem(trip);
+      return tripStatus.status.toLowerCase() === status.toLowerCase();
+    }).length;
+  };
+
+  // ✅ NUEVA FUNCIÓN: Obtener texto del filtro de estado seleccionado
+  const getStatusFilterText = () => {
+    switch(activeStatusFilter) {
+      case 'all': return 'Todos los estados';
+      case 'pendiente': return 'Pendientes';
+      case 'en curso': return 'En curso';
+      case 'completado': return 'Completados';
+      case 'planificado': return 'Planificados';
+      default: return 'Todos los estados';
     }
   };
 
-  // ✅ NUEVA FUNCIÓN: Calcular contadores
+  // ✅ NUEVA FUNCIÓN: Obtener color para el filtro de estado
+  const getStatusFilterColor = () => {
+    switch(activeStatusFilter) {
+      case 'pendiente': return '#FFA500';
+      case 'en curso': return '#4CAF50';
+      case 'completado': return '#888';
+      case 'planificado': return '#FFA500';
+      default: return '#BB86FC';
+    }
+  };
+
+  // ✅ NUEVA FUNCIÓN: Obtener icono para el filtro de estado
+  const getStatusFilterIcon = () => {
+    switch(activeStatusFilter) {
+      case 'pendiente': return 'time-outline';
+      case 'en curso': return 'airplane';
+      case 'completado': return 'checkmark-done';
+      case 'planificado': return 'calendar-outline';
+      default: return 'filter';
+    }
+  };
+
+  // ✅ NUEVA FUNCIÓN: Calcular contadores mejorada
   const getCounters = () => {
     const totalTrips = trips.filter(trip => 
       trip.type === 'viaje' || trip.type === 'trips'
@@ -111,32 +267,31 @@ const MyTripsScreen = ({ navigation }) => {
     
     const totalAll = trips.length;
     
-    switch(activeFilter) {
-      case 'all':
-        return {
-          current: filteredTrips.length,
-          total: totalAll,
-          text: `${filteredTrips.length} de ${totalAll} elementos`
-        };
-      case 'trips':
-        return {
-          current: filteredTrips.length,
-          total: totalTrips,
-          text: `${filteredTrips.length} de ${totalTrips} viajes`
-        };
-      case 'moving':
-        return {
-          current: filteredTrips.length,
-          total: totalMovings,
-          text: `${filteredTrips.length} de ${totalMovings} mudanzas`
-        };
-      default:
-        return {
-          current: filteredTrips.length,
-          total: totalAll,
-          text: `${filteredTrips.length} de ${totalAll} elementos`
-        };
+    let text = '';
+    if (activeStatusFilter !== 'all') {
+      const statusText = getStatusFilterText().toLowerCase();
+      text = `${filteredTrips.length} ${statusText}`;
+    } else {
+      switch(activeFilter) {
+        case 'all':
+          text = `${filteredTrips.length} de ${totalAll} elementos`;
+          break;
+        case 'trips':
+          text = `${filteredTrips.length} de ${totalTrips} viajes`;
+          break;
+        case 'moving':
+          text = `${filteredTrips.length} de ${totalMovings} mudanzas`;
+          break;
+        default:
+          text = `${filteredTrips.length} de ${totalAll} elementos`;
+      }
     }
+    
+    return {
+      current: filteredTrips.length,
+      total: totalAll,
+      text: text
+    };
   };
 
   const getLuggageCount = (tripId) => {
@@ -150,51 +305,27 @@ const MyTripsScreen = ({ navigation }) => {
     return 'trips';
   };
 
-  const getTripStatus = (trip) => {
-    if (!trip.startDate) return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
-    
-    const today = new Date();
-    let startDate, endDate;
-    
-    try {
-      if (trip.startDate.includes('/')) {
-        const [day, month, year] = trip.startDate.split('/');
-        startDate = new Date(year, month - 1, day);
-      } else {
-        startDate = new Date(trip.startDate);
-      }
-      
-      if (trip.endDate && trip.endDate.includes('/')) {
-        const [day, month, year] = trip.endDate.split('/');
-        endDate = new Date(year, month - 1, day);
-      } else if (trip.endDate) {
-        endDate = new Date(trip.endDate);
-      }
-    } catch (error) {
-      console.error('Error procesando fechas:', error);
-      return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
-    }
-    
-    if (isNaN(startDate.getTime())) {
-      return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
-    }
-    
-    if (today < startDate) {
-      return { status: 'Pendiente', color: '#FFA500', icon: 'time-outline' };
-    }
-    
-    if (endDate && !isNaN(endDate.getTime()) && today > endDate) {
-      return { status: 'Completado', color: '#888', icon: 'checkmark-done' };
-    }
-    
-    if (today >= startDate && (!endDate || today <= endDate)) {
-      return { status: 'En curso', color: '#4CAF50', icon: 'airplane' };
-    }
-    
-    return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
+  // ✅ FUNCIÓN CORREGIDA: Usar nombre diferente para evitar recursión
+  const getTripStatusForItem = (trip) => {
+    return getTripStatus(trip);
   };
 
+  // ✅ FUNCIÓN MEJORADA: Eliminar viaje con verificación de estado
   const handleDeleteTrip = async (tripId, tripName) => {
+    const trip = trips.find(t => t.id === tripId);
+    if (!trip) return;
+
+    const tripStatus = getTripStatusForItem(trip);
+    
+    if (!tripStatus.canDelete) {
+      Alert.alert(
+        `Viaje ${tripStatus.status}`,
+        `No puedes eliminar viajes que están ${tripStatus.status.toLowerCase()}.`,
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
     Alert.alert(
       'Eliminar',
       `¿Estás seguro de eliminar "${tripName}"?`,
@@ -221,11 +352,23 @@ const MyTripsScreen = ({ navigation }) => {
     navigation.navigate('TripDetail', { trip });
   };
 
+  // ✅ FUNCIÓN MEJORADA: Navegar a editar viaje con verificación de estado
   const navigateToEditTrip = (trip) => {
+    const tripStatus = getTripStatusForItem(trip);
+    
+    if (!tripStatus.canEdit) {
+      Alert.alert(
+        `Viaje ${tripStatus.status}`,
+        `No puedes editar viajes que están ${tripStatus.status.toLowerCase()}.`,
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
     navigation.navigate('EditTrip', { 
       trip, 
-    origin: 'MyTrips'});
-
+      origin: 'MyTrips'
+    });
   };
 
   const navigateToNewTrip = () => {
@@ -239,7 +382,7 @@ const MyTripsScreen = ({ navigation }) => {
 
   const renderTripItem = ({ item }) => {
     const displayType = getDisplayType(item);
-    const tripStatus = getTripStatus(item);
+    const tripStatus = getTripStatusForItem(item);
     const isMoving = displayType === 'moving';
     const mainTitle = item.purpose || item.destination || (isMoving ? 'Mudanza' : 'Viaje');
     const luggageCount = getLuggageCount(item.id);
@@ -294,17 +437,36 @@ const MyTripsScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.tripActions}>
+          {/* ✅ BOTÓN EDITAR CORREGIDO */}
           <TouchableOpacity 
-            style={styles.actionButton}
+            style={[
+              styles.actionButton,
+              !tripStatus.canEdit && styles.disabledButton
+            ]}
             onPress={() => navigateToEditTrip(item)}
+            disabled={!tripStatus.canEdit}
           >
-            <Ionicons name="create" size={20} color="#2196F3" />
+            <Ionicons 
+              name="create" 
+              size={20} 
+              color={!tripStatus.canEdit ? "#666" : "#2196F3"} 
+            />
           </TouchableOpacity>
+          
+          {/* ✅ BOTÓN ELIMINAR */}
           <TouchableOpacity 
-            style={styles.actionButton}
+            style={[
+              styles.actionButton,
+              !tripStatus.canDelete && styles.disabledButton
+            ]}
             onPress={() => handleDeleteTrip(item.id, mainTitle)}
+            disabled={!tripStatus.canDelete}
           >
-            <Ionicons name="trash" size={20} color="#F44336" />
+            <Ionicons 
+              name="trash" 
+              size={20} 
+              color={!tripStatus.canDelete ? "#666" : "#F44336"} 
+            />
           </TouchableOpacity>
         </View>
       </TouchableOpacity>
@@ -334,7 +496,7 @@ const MyTripsScreen = ({ navigation }) => {
         <TouchableOpacity onPress={goBack}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Mis Viajes & Mudanzas</Text>
+        <Text style={styles.headerTitle}>Mis Viajes y Mudanzas</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -343,6 +505,7 @@ const MyTripsScreen = ({ navigation }) => {
         <Text style={styles.counterText}>{counters.text}</Text>
       </View>
 
+      {/* ✅ FILTROS POR TIPO */}
       <View style={styles.filterContainer}>
         {['all', 'trips', 'moving'].map((filter) => (
           <TouchableOpacity 
@@ -362,6 +525,76 @@ const MyTripsScreen = ({ navigation }) => {
         ))}
       </View>
 
+      {/* ✅ NUEVO: FILTRO POR ESTADO - LISTA DESPLEGABLE */}
+      <View style={styles.statusFilterContainer}>
+        <TouchableOpacity 
+          style={[styles.statusFilterButton, { borderLeftColor: getStatusFilterColor() }]}
+          onPress={() => setShowStatusDropdown(!showStatusDropdown)}
+        >
+          <Ionicons 
+            name={getStatusFilterIcon()} 
+            size={16} 
+            color={getStatusFilterColor()} 
+          />
+          <Text style={styles.statusFilterText}>{getStatusFilterText()}</Text>
+          <Ionicons 
+            name={showStatusDropdown ? "chevron-up" : "chevron-down"} 
+            size={16} 
+            color="#BB86FC" 
+          />
+        </TouchableOpacity>
+
+        {showStatusDropdown && (
+          <View style={styles.statusDropdown}>
+            {['all', 'pendiente', 'en curso', 'completado', 'planificado'].map((status) => (
+              <TouchableOpacity
+                key={status}
+                style={[
+                  styles.statusOption,
+                  activeStatusFilter === status && styles.statusOptionActive
+                ]}
+                onPress={() => {
+                  setActiveStatusFilter(status);
+                  setShowStatusDropdown(false);
+                }}
+              >
+                <View style={styles.statusOptionContent}>
+                  <View style={styles.statusIndicatorContainer}>
+                    {status !== 'all' && (
+                      <View 
+                        style={[
+                          styles.statusIndicator,
+                          { 
+                            backgroundColor: 
+                              status === 'pendiente' ? '#FFA500' :
+                              status === 'en curso' ? '#4CAF50' :
+                              status === 'completado' ? '#888' :
+                              '#FFA500'
+                          }
+                        ]} 
+                      />
+                    )}
+                    <Text style={[
+                      styles.statusOptionText,
+                      activeStatusFilter === status && styles.statusOptionTextActive
+                    ]}>
+                      {status === 'all' ? 'Todos los estados' :
+                       status === 'pendiente' ? `Pendientes (${getStatusCount('pendiente')})` :
+                       status === 'en curso' ? `En curso (${getStatusCount('en curso')})` :
+                       status === 'completado' ? `Completados (${getStatusCount('completado')})` :
+                       `Planificados (${getStatusCount('planificado')})`}
+                    </Text>
+                  </View>
+                  {activeStatusFilter === status && (
+                    <Ionicons name="checkmark" size={16} color="#BB86FC" />
+                  )}
+                </View>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+      </View>
+
       {filteredTrips.length === 0 ? (
         <View style={styles.centerContainer}>
           <Ionicons 
@@ -370,8 +603,9 @@ const MyTripsScreen = ({ navigation }) => {
             color="#666" 
           />
           <Text style={styles.emptyText}>
-            {activeFilter === 'all' ? 'No tienes viajes ni mudanzas' : 
-             `No tienes ${activeFilter === 'trips' ? 'viajes' : 'mudanzas'} guardados`}
+            {activeFilter === 'all' && activeStatusFilter === 'all' 
+              ? 'No tienes viajes ni mudanzas' 
+              : `No tienes ${activeFilter === 'trips' ? 'viajes' : activeFilter === 'moving' ? 'mudanzas' : 'elementos'} ${activeStatusFilter !== 'all' ? getStatusFilterText().toLowerCase() : ''}`}
           </Text>
           <TouchableOpacity 
             style={styles.createButton}
@@ -461,6 +695,79 @@ const styles = StyleSheet.create({
   filterTextActive: {
     color: '#FFFFFF',
     fontWeight: 'bold',
+  },
+  // ✅ NUEVOS ESTILOS: Filtro por estado
+  statusFilterContainer: {
+    paddingHorizontal: 15,
+    paddingBottom: 10,
+    position: 'relative',
+    zIndex: 1000,
+  },
+  statusFilterButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#1E1E1E',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    gap: 8,
+  },
+  statusFilterText: {
+    flex: 1,
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  statusDropdown: {
+    position: 'absolute',
+    top: '100%',
+    left: 15,
+    right: 15,
+    backgroundColor: '#2A2A2A',
+    borderRadius: 8,
+    marginTop: 5,
+    padding: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.8,
+    shadowRadius: 4,
+    elevation: 8,
+    zIndex: 1001,
+  },
+  statusOption: {
+    paddingVertical: 12,
+    paddingHorizontal: 12,
+    borderRadius: 6,
+  },
+  statusOptionActive: {
+    backgroundColor: '#333',
+  },
+  statusOptionContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  statusIndicatorContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+  },
+  statusIndicator: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    marginRight: 10,
+  },
+  statusOptionText: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    flex: 1,
+  },
+  statusOptionTextActive: {
+    color: '#BB86FC',
+    fontWeight: '600',
   },
   listContainer: {
     padding: 15,
@@ -571,6 +878,10 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+  },
+  // ✅ NUEVO ESTILO: Botón deshabilitado
+  disabledButton: {
+    opacity: 0.5,
   },
   emptyText: {
     fontSize: 18,

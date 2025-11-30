@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import {
+  Alert,
   BackHandler,
   Modal,
   ScrollView,
@@ -12,7 +13,110 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { getLuggageByTripId } from '../../firebase/luggageService';
+import { deleteLuggage, getLuggageByTripId } from '../../firebase/luggageService';
+import { deleteTrip } from '../../firebase/tripService';
+
+// ✅ FUNCIÓN CENTRAL MEJORADA: Verificar estado del viaje con permisos
+const getTripStatus = (trip) => {
+  if (!trip.startDate) {
+    return { 
+      status: 'Planificado', 
+      color: '#FFA500', 
+      icon: 'calendar-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  const today = new Date();
+  let startDate, endDate;
+  
+  try {
+    if (trip.startDate.includes('/')) {
+      const [day, month, year] = trip.startDate.split('/');
+      startDate = new Date(year, month - 1, day);
+    } else {
+      startDate = new Date(trip.startDate);
+    }
+    
+    if (trip.endDate && trip.endDate.includes('/')) {
+      const [day, month, year] = trip.endDate.split('/');
+      endDate = new Date(year, month - 1, day);
+    } else if (trip.endDate) {
+      endDate = new Date(trip.endDate);
+    }
+  } catch (error) {
+    return { 
+      status: 'Planificado', 
+      color: '#FFA500', 
+      icon: 'calendar-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  if (isNaN(startDate.getTime())) {
+    return { 
+      status: 'Planificado', 
+      color: '#FFA500', 
+      icon: 'calendar-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  if (today < startDate) {
+    return { 
+      status: 'Pendiente', 
+      color: '#FFA500', 
+      icon: 'time-outline', 
+      canEdit: true, 
+      canDelete: true,
+      canEditLuggage: true,
+      canDeleteLuggage: true
+    };
+  }
+  
+  if (endDate && !isNaN(endDate.getTime()) && today > endDate) {
+    return { 
+      status: 'Completado', 
+      color: '#888', 
+      icon: 'checkmark-done', 
+      canEdit: false, 
+      canDelete: false,
+      canEditLuggage: false,
+      canDeleteLuggage: false
+    };
+  }
+  
+  if (today >= startDate && (!endDate || today <= endDate)) {
+    return { 
+      status: 'En curso', 
+      color: '#4CAF50', 
+      icon: 'airplane', 
+      canEdit: false, 
+      canDelete: false,
+      canEditLuggage: false,
+      canDeleteLuggage: false
+    };
+  }
+  
+  return { 
+    status: 'Planificado', 
+    color: '#FFA500', 
+    icon: 'calendar-outline', 
+    canEdit: true, 
+    canDelete: true,
+    canEditLuggage: true,
+    canDeleteLuggage: true
+  };
+};
 
 const TripDetailScreen = ({ route, navigation }) => {
   const { trip } = route.params;
@@ -20,6 +124,7 @@ const TripDetailScreen = ({ route, navigation }) => {
   const [loading, setLoading] = useState(true);
   const [selectedLuggage, setSelectedLuggage] = useState(null);
   const [showLuggageModal, setShowLuggageModal] = useState(false);
+  const [showActionsModal, setShowActionsModal] = useState(false);
   
   const insets = useSafeAreaInsets();
 
@@ -98,45 +203,9 @@ const TripDetailScreen = ({ route, navigation }) => {
     }
   };
 
-  // ✅ FUNCIÓN MEJORADA: Determinar estado del viaje
-  const getTripStatus = () => {
-    console.log('📅 Verificando estado del viaje - startDate:', trip.startDate, 'endDate:', trip.endDate);
-    
-    if (!trip.startDate || trip.startDate === 'undefined') {
-      return { status: 'Planificado', color: '#FFA500' };
-    }
-    
-    const today = new Date();
-    let startDate, endDate;
-    
-    try {
-      if (trip.startDate.includes('/') && trip.startDate.split('/').length === 3) {
-        const [day, month, year] = trip.startDate.split('/');
-        startDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-      } else {
-        startDate = new Date(trip.startDate);
-      }
-      
-      if (trip.endDate && trip.endDate !== 'undefined' && trip.endDate.includes('/') && trip.endDate.split('/').length === 3) {
-        const [day, month, year] = trip.endDate.split('/');
-        endDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-      } else if (trip.endDate && trip.endDate !== 'undefined') {
-        endDate = new Date(trip.endDate);
-      }
-    } catch (error) {
-      console.error('❌ Error procesando fechas:', error);
-      return { status: 'Planificado', color: '#FFA500' };
-    }
-    
-    if (isNaN(startDate.getTime())) return { status: 'Planificado', color: '#FFA500' };
-    
-    if (today < startDate) return { status: 'Pendiente', color: '#FFA500' };
-    if (endDate && !isNaN(endDate.getTime()) && today > endDate) return { status: 'Completado', color: '#888' };
-    if (today >= startDate && (!endDate || today <= endDate)) {
-      return { status: 'En curso', color: '#4CAF50' };
-    }
-    
-    return { status: 'Planificado', color: '#FFA500' };
+  // ✅ FUNCIÓN ACTUALIZADA: Usar la función central getTripStatus
+  const getTripStatusForTrip = () => {
+    return getTripStatus(trip);
   };
 
   // ✅ CALCULAR TOTAL DE ARTÍCULOS
@@ -158,32 +227,161 @@ const TripDetailScreen = ({ route, navigation }) => {
     setSelectedLuggage(null);
   };
 
+  // ✅ ABRIR MODAL DE ACCIONES
+  const openActionsModal = () => {
+    setShowActionsModal(true);
+  };
+
+  // ✅ CERRAR MODAL DE ACCIONES
+  const closeActionsModal = () => {
+    setShowActionsModal(false);
+  };
+
+  // ✅ FUNCIÓN MEJORADA: Eliminar viaje con verificación de estado
+  const handleDeleteTrip = async () => {
+    const tripStatus = getTripStatusForTrip();
+    
+    if (!tripStatus.canDelete) {
+      Alert.alert(
+        `Viaje ${tripStatus.status}`,
+        `No puedes eliminar viajes que están ${tripStatus.status.toLowerCase()}.`,
+        [{ text: 'Entendido' }]
+      );
+      closeActionsModal();
+      return;
+    }
+
+    Alert.alert(
+      'Eliminar Viaje',
+      `¿Estás seguro de eliminar "${trip.purpose || trip.destination || 'este viaje'}"?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Eliminar', 
+          onPress: async () => {
+            try {
+              await deleteTrip(trip.id);
+              closeActionsModal();
+              navigation.navigate('MyTrips');
+            } catch (error) {
+              Alert.alert('Error', 'No se pudo eliminar el viaje');
+            }
+          },
+          style: 'destructive'
+        }
+      ]
+    );
+  };
+
+  // ✅ FUNCIÓN MEJORADA: Eliminar maleta con verificación de estado
+  const handleDeleteLuggage = async (luggageItem) => {
+    const tripStatus = getTripStatusForTrip();
+    
+    if (!tripStatus.canDeleteLuggage) {
+      Alert.alert(
+        `Viaje ${tripStatus.status}`,
+        `No puedes eliminar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Eliminar Maleta',
+      `¿Estás seguro de eliminar esta ${luggageItem.categoria || 'maleta'}?`,
+      [
+        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Eliminar', 
+          onPress: async () => {
+            try {
+              await deleteLuggage(trip.id, luggageItem.id);
+              setLuggage(luggage.filter(item => item.id !== luggageItem.id));
+              closeLuggageModal();
+              Alert.alert('✅', 'Maleta eliminada correctamente');
+            } catch (error) {
+              Alert.alert('Error', 'No se pudo eliminar la maleta');
+            }
+          },
+          style: 'destructive'
+        }
+      ]
+    );
+  };
+
+  // ✅ FUNCIÓN MEJORADA: Editar maleta con verificación de estado
+  const handleEditLuggage = (luggageItem) => {
+    const tripStatus = getTripStatusForTrip();
+    
+    if (!tripStatus.canEditLuggage) {
+      Alert.alert(
+        `Viaje ${tripStatus.status}`,
+        `No puedes editar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
+    closeLuggageModal();
+    navigation.navigate('NewMaleta', { 
+      tripId: trip.id, 
+      destination: trip.destination, 
+      purpose: trip.purpose,
+      origin: 'TripDetail',
+      trip: trip,
+      luggageToEdit: luggageItem,
+      mode: 'edit'
+    });
+  };
+
   // ✅ CORREGIDO: Navegación sin replace
   const goBack = () => {
     navigation.navigate('MyTrips');
   };
 
-  // ✅ CORREGIDO: Navegación con origen
+  // ✅ FUNCIÓN MEJORADA: Navegar a editar viaje con verificación de estado
   const navigateToEditTrip = () => {
+    const tripStatus = getTripStatusForTrip();
+    
+    if (!tripStatus.canEdit) {
+      Alert.alert(
+        `Viaje ${tripStatus.status}`,
+        `No puedes editar viajes que están ${tripStatus.status.toLowerCase()}.`,
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
     navigation.navigate('EditTrip', { 
       trip,
       origin: 'TripDetail' 
     });
   };
 
-  // ✅ CORREGIDO: Pasar el trip completo a NewMaleta
+  // ✅ FUNCIÓN MEJORADA: Navegar a nueva maleta con verificación de estado
   const navigateToNewMaleta = () => {
+    const tripStatus = getTripStatusForTrip();
+    
+    if (!tripStatus.canEditLuggage) {
+      Alert.alert(
+        `Viaje ${tripStatus.status}`,
+        `No puedes agregar maletas a viajes que están ${tripStatus.status.toLowerCase()}.`,
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
     console.log('🟡 Navegando a NewMaleta con trip completo');
     navigation.navigate('NewMaleta', { 
       tripId: trip.id, 
       destination: trip.destination, 
       purpose: trip.purpose,
       origin: 'TripDetail',
-      trip: trip // 👈 PASAR EL TRIP COMPLETO
+      trip: trip
     });
   };
 
-  const tripStatus = getTripStatus();
+  const tripStatus = getTripStatusForTrip();
   const totalItems = getTotalItems();
 
   return (
@@ -196,9 +394,14 @@ const TripDetailScreen = ({ route, navigation }) => {
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalle del Viaje</Text>
-        <TouchableOpacity onPress={navigateToEditTrip}>
-          <Ionicons name="create" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
+        <View style={styles.headerActions}>
+          <TouchableOpacity onPress={navigateToEditTrip} style={styles.headerButton}>
+            <Ionicons name="create" size={24} color="#2196F3" />
+          </TouchableOpacity>
+          <TouchableOpacity onPress={openActionsModal} style={styles.headerButton}>
+            <Ionicons name="ellipsis-vertical" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+        </View>
       </View>
 
       <ScrollView style={styles.content}>
@@ -258,11 +461,24 @@ const TripDetailScreen = ({ route, navigation }) => {
               </Text>
             </View>
             <TouchableOpacity 
-              style={styles.addButton}
+              style={[
+                styles.addButton,
+                !tripStatus.canEditLuggage && styles.disabledButton
+              ]}
               onPress={navigateToNewMaleta}
+              disabled={!tripStatus.canEditLuggage}
             >
-              <Ionicons name="add" size={20} color="#FFFFFF" />
-              <Text style={styles.addButtonText}>Agregar</Text>
+              <Ionicons 
+                name="add" 
+                size={20} 
+                color={!tripStatus.canEditLuggage ? "#666" : "#FFFFFF"} 
+              />
+              <Text style={[
+                styles.addButtonText,
+                !tripStatus.canEditLuggage && styles.disabledText
+              ]}>
+                Agregar
+              </Text>
             </TouchableOpacity>
           </View>
           
@@ -306,7 +522,10 @@ const TripDetailScreen = ({ route, navigation }) => {
               <Ionicons name="bag-outline" size={50} color="#666" />
               <Text style={styles.emptyStateText}>No hay maletas agregadas</Text>
               <Text style={styles.emptyStateSubtext}>
-                Agrega maletas para organizar tus artículos
+                {!tripStatus.canEditLuggage 
+                  ? `No puedes agregar maletas a viajes ${tripStatus.status.toLowerCase()}`
+                  : 'Agrega maletas para organizar tus artículos'
+                }
               </Text>
             </View>
           )}
@@ -329,6 +548,12 @@ const TripDetailScreen = ({ route, navigation }) => {
                 }
               </Text>
             </View>
+            <View style={styles.infoRow}>
+              <Text style={styles.label}>Estado:</Text>
+              <Text style={[styles.value, { color: tripStatus.color }]}>
+                {tripStatus.status}
+              </Text>
+            </View>
           </View>
         </View>
       </ScrollView>
@@ -346,12 +571,14 @@ const TripDetailScreen = ({ route, navigation }) => {
               <View style={styles.modalContent}>
                 {/* Header del Modal */}
                 <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>
-                    {selectedLuggage?.categoria || 'Maleta'}
-                  </Text>
-                  <Text style={styles.modalSubtitle}>
-                    {selectedLuggage?.articulos?.length || 0} artículos
-                  </Text>
+                  <View style={styles.modalTitleContainer}>
+                    <Text style={styles.modalTitle}>
+                      {selectedLuggage?.categoria || 'Maleta'}
+                    </Text>
+                    <Text style={styles.modalSubtitle}>
+                      {selectedLuggage?.articulos?.length || 0} artículos
+                    </Text>
+                  </View>
                   <TouchableOpacity 
                     style={styles.modalCloseButton}
                     onPress={closeLuggageModal}
@@ -377,13 +604,116 @@ const TripDetailScreen = ({ route, navigation }) => {
                   )}
                 </ScrollView>
 
-                {/* Footer del Modal */}
+                {/* Footer del Modal con acciones */}
+                <View style={styles.modalFooter}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.modalActionButton,
+                      styles.editButton,
+                      !tripStatus.canEditLuggage && styles.disabledButton
+                    ]}
+                    onPress={() => handleEditLuggage(selectedLuggage)}
+                    disabled={!tripStatus.canEditLuggage}
+                  >
+                    <Ionicons 
+                      name="create" 
+                      size={20} 
+                      color={!tripStatus.canEditLuggage ? "#666" : "#FFFFFF"} 
+                    />
+                    <Text style={[
+                      styles.modalActionText,
+                      !tripStatus.canEditLuggage && styles.disabledText
+                    ]}>
+                      Editar
+                    </Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[
+                      styles.modalActionButton,
+                      styles.deleteButton,
+                      !tripStatus.canDeleteLuggage && styles.disabledButton
+                    ]}
+                    onPress={() => handleDeleteLuggage(selectedLuggage)}
+                    disabled={!tripStatus.canDeleteLuggage}
+                  >
+                    <Ionicons 
+                      name="trash" 
+                      size={20} 
+                      color={!tripStatus.canDeleteLuggage ? "#666" : "#FFFFFF"} 
+                    />
+                    <Text style={[
+                      styles.modalActionText,
+                      !tripStatus.canDeleteLuggage && styles.disabledText
+                    ]}>
+                      Eliminar
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+            </TouchableWithoutFeedback>
+          </View>
+        </TouchableWithoutFeedback>
+      </Modal>
+
+      {/* Modal de Acciones del Viaje */}
+      <Modal
+        visible={showActionsModal}
+        transparent
+        animationType="slide"
+        onRequestClose={closeActionsModal}
+      >
+        <TouchableWithoutFeedback onPress={closeActionsModal}>
+          <View style={styles.modalOverlay}>
+            <TouchableWithoutFeedback>
+              <View style={styles.modalContent}>
+                <View style={styles.modalHeader}>
+                  <Text style={styles.modalTitle}>Acciones del Viaje</Text>
+                  <TouchableOpacity 
+                    style={styles.modalCloseButton}
+                    onPress={closeActionsModal}
+                  >
+                    <Ionicons name="close" size={24} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </View>
+
+                <View style={styles.actionsList}>
+                  <TouchableOpacity 
+                    style={[
+                      styles.actionItem,
+                      !tripStatus.canDelete && styles.disabledAction
+                    ]}
+                    onPress={handleDeleteTrip}
+                    disabled={!tripStatus.canDelete}
+                  >
+                    <Ionicons 
+                      name="trash" 
+                      size={24} 
+                      color={!tripStatus.canDelete ? "#666" : "#F44336"} 
+                    />
+                    <View style={styles.actionTextContainer}>
+                      <Text style={[
+                        styles.actionTitle,
+                        !tripStatus.canDelete && styles.disabledText
+                      ]}>
+                        Eliminar Viaje
+                      </Text>
+                      <Text style={styles.actionSubtitle}>
+                        {!tripStatus.canDelete 
+                          ? `No disponible - Viaje ${tripStatus.status}`
+                          : 'Eliminar este viaje permanentemente'
+                        }
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+
                 <View style={styles.modalFooter}>
                   <TouchableOpacity 
                     style={styles.modalActionButton}
-                    onPress={closeLuggageModal}
+                    onPress={closeActionsModal}
                   >
-                    <Text style={styles.modalActionText}>Cerrar</Text>
+                    <Text style={styles.modalActionText}>Cancelar</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -412,6 +742,14 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  headerButton: {
+    padding: 4,
+    marginLeft: 12,
   },
   content: {
     flex: 1,
@@ -612,23 +950,24 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: 15,
     borderTopRightRadius: 15,
     position: 'relative',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+  },
+  modalTitleContainer: {
+    flex: 1,
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    textAlign: 'center',
   },
   modalSubtitle: {
     fontSize: 14,
     color: '#BB86FC',
-    textAlign: 'center',
     marginTop: 4,
   },
   modalCloseButton: {
-    position: 'absolute',
-    top: 16,
-    right: 16,
     padding: 4,
   },
   modalList: {
@@ -663,17 +1002,63 @@ const styles = StyleSheet.create({
     padding: 16,
     borderTopWidth: 1,
     borderTopColor: '#333',
+    flexDirection: 'row',
+    gap: 12,
   },
   modalActionButton: {
-    backgroundColor: '#2196F3',
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: 14,
     borderRadius: 10,
-    alignItems: 'center',
+    gap: 8,
+  },
+  editButton: {
+    backgroundColor: '#2196F3',
+  },
+  deleteButton: {
+    backgroundColor: '#F44336',
   },
   modalActionText: {
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: 'bold',
+  },
+  // Nuevos estilos para acciones
+  actionsList: {
+    padding: 16,
+  },
+  actionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    borderRadius: 10,
+    backgroundColor: '#2A2A2A',
+  },
+  disabledAction: {
+    opacity: 0.5,
+  },
+  actionTextContainer: {
+    marginLeft: 12,
+    flex: 1,
+  },
+  actionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+  },
+  actionSubtitle: {
+    fontSize: 12,
+    color: '#888',
+    marginTop: 2,
+  },
+  // Estilos para elementos deshabilitados
+  disabledButton: {
+    backgroundColor: '#666',
+  },
+  disabledText: {
+    color: '#999',
   },
 });
 

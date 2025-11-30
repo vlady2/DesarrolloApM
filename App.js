@@ -9,13 +9,16 @@ import RegisterScreen from './src/screens/auth_users/RegisterScreen';
 
 
 // Main Screens
+import ArticulosProhibidosScreen from './src/screens/ArticulosProhibidosScreen';
 import EditTripScreen from './src/screens/EditTripScreen';
 import HomeScreen from './src/screens/HomeScreen';
+import MaletasScreen from './src/screens/Maletascreen';
 import MyTripsScreen from './src/screens/MyTripsScreen';
 import NewMaletaScreen from './src/screens/NewMaletaScreen';
 import NewTripScreen from './src/screens/NewTripScreen';
 import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
+
 
 
 
@@ -76,6 +79,17 @@ export default function App() {
          <Stack.Screen 
           name="Setting" 
           component={SettingScreen}
+          options={{ headerShown: false }}
+        />
+
+        <Stack.Screen 
+          name="ArticulosProhibidos" 
+          component={ArticulosProhibidosScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="Box" 
+          component={MaletasScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
