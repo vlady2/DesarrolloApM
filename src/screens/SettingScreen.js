@@ -52,12 +52,12 @@ const SettingScreen = ({ navigation }) => {
         {
             title: 'Ayuda y Soporte',
             icon: '❓',
-            onPress: () => console.log('Ayuda presionado')
+            onPress: () => navigation.navigate('help')
         },
         {
             title: 'Acerca de',
             icon: 'ℹ️',
-            onPress: () => console.log('Acerca de presionado')
+            onPress: () => navigation.navigate('About')
         }
     ];
 

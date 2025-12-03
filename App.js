@@ -9,6 +9,7 @@ import RegisterScreen from './src/screens/auth_users/RegisterScreen';
 
 
 // Main Screens
+import AboutScreen from './src/screens/AboutScreen';
 import ArticulosProhibidosScreen from './src/screens/ArticulosProhibidosScreen';
 import EditMoveScreen from './src/screens/EditMoveScreen';
 import EditTripScreen from './src/screens/EditTripScreen';
@@ -22,8 +23,7 @@ import NewMoveScreen from './src/screens/NewMoveScreen';
 import NewTripScreen from './src/screens/NewTripScreen';
 import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
-
-
+import helpSoportScreen from './src/screens/helpSoportScreen';
 
 
 const Stack = createNativeStackNavigator();
@@ -116,6 +116,15 @@ export default function App() {
           component={EditMoveScreen}
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+        name="About"
+        component={AboutScreen}
+        options={{headerShown: false}}
+        />
+        <Stack.Screen
+        name="help"
+        component={helpSoportScreen}
+        options={{headerShown: false}}/>
       </Stack.Navigator>
     </NavigationContainer>
   );
