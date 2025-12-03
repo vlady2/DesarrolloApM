@@ -12,6 +12,7 @@ import {
     where
 } from 'firebase/firestore';
 import { auth, db } from './auth';
+import { geocodeMoveAddresses } from './geocodingService';
 
 // Colección para las mudanzas
 const MOVES_COLLECTION = 'mudanzas';
@@ -31,31 +32,37 @@ export const saveMove = async (moveData) => {
       throw new Error('Usuario no autenticado');
     }
 
+    // 1. GEOPOCODIFICAR DIRECCIONES
+    console.log('📍 Geocodificando direcciones...');
+    const { originCoords, destinationCoords } = await geocodeMoveAddresses({
+      origin: moveData.origin,
+      destination: moveData.destination
+    });
+
+    // 2. CREAR OBJETO CON COORDENADAS
     const moveWithUser = {
       ...moveData,
       userId: user.uid,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      // Añadir coordenadas (pueden ser null si falla la geocodificación)
+      ...(originCoords && { originCoords }),
+      ...(destinationCoords && { destinationCoords })
     };
 
     console.log('🟡 Guardando mudanza en Firestore...');
     console.log('👤 User ID:', user.uid);
-    console.log('📝 Datos de la mudanza:', {
-      moveName: moveData.moveName,
-      origin: moveData.origin,
-      destination: moveData.destination,
-      moveDate: moveData.moveDate
+    console.log('📍 Coordenadas obtenidas:', {
+      origin: originCoords ? `${originCoords.latitude}, ${originCoords.longitude}` : 'No disponible',
+      destination: destinationCoords ? `${destinationCoords.latitude}, ${destinationCoords.longitude}` : 'No disponible'
     });
     
-    // ✅ VERIFICACIÓN EXPLÍCITA DE LA COLECCIÓN
+    // 3. GUARDAR EN FIRESTORE
     const movesCollection = collection(db, MOVES_COLLECTION);
-    console.log('📂 Intentando guardar en colección:', MOVES_COLLECTION);
-    
     const docRef = await addDoc(movesCollection, moveWithUser);
     
-    console.log('🟢 ✅ MUDANZA GUARDADA EXITOSAMENTE');
+    console.log('🟢 ✅ MUDANZA GUARDADA CON COORDENADAS');
     console.log('📄 ID del documento:', docRef.id);
-    console.log('🎉 Mudanza guardada correctamente en Firestore');
     
     return { id: docRef.id, ...moveWithUser };
   } catch (error) {
@@ -243,13 +250,31 @@ export const updateMove = async (moveId, moveData) => {
   try {
     console.log('🟡 Actualizando mudanza:', moveId);
     
+    // Si se actualizan las direcciones, geocodificar nuevamente
+    let coordinatesToUpdate = {};
+    
+    if (moveData.origin || moveData.destination) {
+      console.log('📍 Geocodificando direcciones actualizadas...');
+      
+      const currentMove = await getMoveById(moveId);
+      
+      const { originCoords, destinationCoords } = await geocodeMoveAddresses({
+        origin: moveData.origin || currentMove.origin,
+        destination: moveData.destination || currentMove.destination
+      });
+      
+      if (originCoords) coordinatesToUpdate.originCoords = originCoords;
+      if (destinationCoords) coordinatesToUpdate.destinationCoords = destinationCoords;
+    }
+    
     const moveRef = doc(db, MOVES_COLLECTION, moveId);
     await updateDoc(moveRef, {
       ...moveData,
+      ...coordinatesToUpdate,
       updatedAt: new Date()
     });
     
-    console.log('🟢 Mudanza actualizada correctamente');
+    console.log('🟢 Mudanza actualizada correctamente con coordenadas');
   } catch (error) {
     console.error('❌ Error actualizando mudanza:', error);
     throw error;

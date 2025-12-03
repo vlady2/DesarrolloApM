@@ -1,5 +1,4 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -19,10 +18,11 @@ import { auth } from '../../firebase/auth';
 import { getUserTrips, saveTrip } from '../../firebase/tripService';
 
 const NewTripScreen = ({ route, navigation }) => {
-  const { origin = 'Home' } = route.params || {};
+  const { origin = 'Home', selectedLocation } = route.params || {};
   
+  // 🔥 IMPORTANTE: Inicializar con la ubicación seleccionada del mapa si existe
   const [trip, setTrip] = useState({
-    destination: '',
+    destination: selectedLocation?.address || '', // Ahora viene como "País, Ciudad"
     startDate: '',
     endDate: '',
     purpose: '',
@@ -33,12 +33,32 @@ const NewTripScreen = ({ route, navigation }) => {
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [datePickerMode, setDatePickerMode] = useState('start');
   const [existingTrips, setExistingTrips] = useState([]);
+  const [selectedCountry, setSelectedCountry] = useState(selectedLocation?.country || '');
+  const [selectedCity, setSelectedCity] = useState(selectedLocation?.city || '');
 
   const insets = useSafeAreaInsets();
 
   useEffect(() => {
     loadExistingTrips();
-  }, []);
+    
+    // 🔥 Si viene una ubicación del mapa, extraer país y ciudad
+    if (selectedLocation) {
+      const { address, country, city } = selectedLocation;
+      
+      // Si el address viene como "País, Ciudad", ya está en el formato correcto
+      console.log('📍 Ubicación recibida:', address);
+      console.log('🏙️ Ciudad:', city);
+      console.log('🇺🇳 País:', country);
+      
+      setTrip(prev => ({
+        ...prev,
+        destination: address || ''
+      }));
+      
+      setSelectedCountry(country || '');
+      setSelectedCity(city || '');
+    }
+  }, [selectedLocation]);
 
   const loadExistingTrips = async () => {
     try {
@@ -91,7 +111,6 @@ const NewTripScreen = ({ route, navigation }) => {
 
   // ✅ FUNCIÓN CORREGIDA: Formatear fecha sin problemas de zona horaria
   const formatDate = (date) => {
-    // Usar UTC para evitar problemas de zona horaria
     const utcDate = new Date(Date.UTC(
       date.getFullYear(),
       date.getMonth(),
@@ -107,7 +126,6 @@ const NewTripScreen = ({ route, navigation }) => {
   // ✅ FUNCIÓN CORREGIDA: Obtener fecha actual sin problemas de zona horaria
   const getToday = () => {
     const now = new Date();
-    // Crear fecha en UTC para comparaciones consistentes
     const today = new Date(Date.UTC(
       now.getFullYear(),
       now.getMonth(),
@@ -116,7 +134,7 @@ const NewTripScreen = ({ route, navigation }) => {
     return today;
   };
 
-  // ✅ FUNCIÓN NUEVA: Convertir fecha string a Date object consistentemente
+  // ✅ FUNCIÓN: Convertir fecha string a Date object consistentemente
   const parseDateString = (dateString) => {
     if (!dateString) return null;
     
@@ -124,10 +142,9 @@ const NewTripScreen = ({ route, navigation }) => {
     if (parts.length !== 3) return null;
     
     const day = parseInt(parts[0], 10);
-    const month = parseInt(parts[1], 10) - 1; // Los meses son 0-indexed
+    const month = parseInt(parts[1], 10) - 1;
     const year = parseInt(parts[2], 10);
     
-    // Usar UTC para evitar problemas de zona horaria
     return new Date(Date.UTC(year, month, day));
   };
 
@@ -140,7 +157,6 @@ const NewTripScreen = ({ route, navigation }) => {
       if (datePickerMode === 'start') {
         setTrip({...trip, startDate: formattedDate});
         
-        // Si la fecha de fin es anterior a la nueva fecha de inicio, limpiarla
         if (trip.endDate) {
           const endDate = parseDateString(trip.endDate);
           const startDate = parseDateString(formattedDate);
@@ -222,7 +238,6 @@ const NewTripScreen = ({ route, navigation }) => {
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA: Validación con fechas consistentes
   const validateAllDateRestrictions = () => {
     if (!trip.startDate || !trip.endDate) {
       return true;
@@ -237,7 +252,6 @@ const NewTripScreen = ({ route, navigation }) => {
       return false;
     }
 
-    // ✅ CORREGIDO: Comparación correcta con fecha actual
     if (startDate < today) {
       Alert.alert('Error', 'La fecha de inicio no puede ser una fecha pasada.');
       return false;
@@ -274,7 +288,6 @@ const NewTripScreen = ({ route, navigation }) => {
     return true;
   };
 
-  // ✅ FUNCIÓN CORREGIDA: Verificación con fechas consistentes
   const isTripStartingToday = () => {
     if (!trip.startDate) return false;
     
@@ -297,62 +310,46 @@ const NewTripScreen = ({ route, navigation }) => {
     return startDate.getTime() > today.getTime();
   };
 
-  // 🔽 EL RESTO DEL CÓDIGO SE MANTIENE IGUAL 🔽
-  const openMap = async () => {
-    try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      
-      const options = [
-        {
-          text: 'Usar mi ubicación actual',
-          onPress: async () => {
-            if (status === 'granted') {
-              let location = await Location.getCurrentPositionAsync({});
-              let geocode = await Location.reverseGeocodeAsync(location.coords);
-              if (geocode[0]) {
-                setTrip({
-                  ...trip, 
-                  destination: `${geocode[0].city || geocode[0].region}, ${geocode[0].country}`
-                });
-              }
-            }
-          }
-        },
-        {
-          text: 'Ciudad de México',
-          onPress: () => setTrip({...trip, destination: 'Ciudad de México, México'})
-        },
-        {
-          text: 'Madrid',
-          onPress: () => setTrip({...trip, destination: 'Madrid, España'})
-        },
-        {
-          text: 'Nueva York',
-          onPress: () => setTrip({...trip, destination: 'Nueva York, USA'})
-        },
-        {
-          text: 'Escribir manualmente',
-          onPress: () => {
-            Alert.prompt(
-              'Destino',
-              'Escribe tu destino:',
-              (text) => {
-                if (text) setTrip({...trip, destination: text});
-              }
-            );
-          }
-        },
-        {
-          text: 'Cancelar',
-          style: 'cancel'
+  // 🔥 FUNCIÓN ACTUALIZADA: Abrir el mapa
+  const openMap = () => {
+    // Navegar al MapPickerScreen
+    navigation.navigate('MapPicker', {
+      onSelectLocation: (location) => {
+        // Esta función se llamará cuando selecciones una ubicación en el mapa
+        if (location) {
+          const { country, city, address } = location;
+          
+          console.log('📍 Nueva ubicación seleccionada:', address);
+          console.log('🏙️ Ciudad:', city);
+          console.log('🇺🇳 País:', country);
+          
+          setTrip(prev => ({
+            ...prev,
+            destination: address || `${country}, ${city}`
+          }));
+          
+          setSelectedCountry(country || '');
+          setSelectedCity(city || '');
         }
-      ];
+      },
+      returnScreen: 'NewTrip'
+    });
+  };
 
-      Alert.alert('Seleccionar Destino', 'Elige tu destino:', options);
-    } catch (error) {
-      console.log('Error:', error);
-      Alert.alert('Error', 'No se pudo obtener la ubicación');
+  // 🔥 FUNCIÓN MEJORADA: Validar destino
+  const validateDestination = () => {
+    if (!trip.destination || trip.destination.trim() === '') {
+      Alert.alert('Error', 'Por favor selecciona un destino');
+      return false;
     }
+    
+    // Verificar que el destino tenga el formato correcto
+    if (trip.destination.split(',').length < 2) {
+      Alert.alert('Formato incorrecto', 'El destino debe tener el formato: "País, Ciudad"');
+      return false;
+    }
+    
+    return true;
   };
 
   const validateDates = () => {
@@ -373,9 +370,10 @@ const NewTripScreen = ({ route, navigation }) => {
     validateDates();
   }, [trip.startDate, trip.endDate]);
 
+  // 🔥 FUNCIÓN ACTUALIZADA: Guardar viaje
   const saveTripToFirebase = async () => {
-    if (!trip.destination) {
-      Alert.alert('Error', 'Por favor selecciona un destino');
+    // Validar destino primero
+    if (!validateDestination()) {
       return;
     }
 
@@ -401,8 +399,11 @@ const NewTripScreen = ({ route, navigation }) => {
     setSaving(true);
     
     try {
+      // 🔥 Guardar tanto el destino completo como país y ciudad por separado
       const tripData = {
-        destination: trip.destination,
+        destination: trip.destination, // Formato: "País, Ciudad"
+        country: selectedCountry || extractCountry(trip.destination),
+        city: selectedCity || extractCity(trip.destination),
         startDate: trip.startDate,
         endDate: trip.endDate,
         purpose: trip.purpose,
@@ -413,6 +414,8 @@ const NewTripScreen = ({ route, navigation }) => {
         updatedAt: new Date(),
         startsToday: isTripStartingToday()
       };
+
+      console.log('💾 Guardando viaje:', tripData);
 
       const result = await saveTrip(tripData);
       
@@ -429,6 +432,8 @@ const NewTripScreen = ({ route, navigation }) => {
                 navigation.replace('NewMaleta', { 
                   tripId: result.id,
                   destination: trip.destination,
+                  country: selectedCountry,
+                  city: selectedCity,
                   purpose: trip.purpose,
                   origin: origin,
                   forceLuggage: true,
@@ -457,6 +462,8 @@ const NewTripScreen = ({ route, navigation }) => {
                 navigation.navigate('NewMaleta', { 
                   tripId: result.id,
                   destination: trip.destination,
+                  country: selectedCountry,
+                  city: selectedCity,
                   purpose: trip.purpose,
                   origin: origin
                 });
@@ -487,6 +494,20 @@ const NewTripScreen = ({ route, navigation }) => {
     }
   };
 
+  // 🔥 FUNCIONES AUXILIARES: Extraer país y ciudad del string
+  const extractCountry = (destination) => {
+    if (!destination) return '';
+    const parts = destination.split(',');
+    return parts.length > 0 ? parts[0].trim() : '';
+  };
+
+  const extractCity = (destination) => {
+    if (!destination) return '';
+    const parts = destination.split(',');
+    return parts.length > 1 ? parts[1].trim() : parts[0].trim();
+  };
+
+  // 🔥 COMPONENTE RENDER
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
@@ -503,9 +524,25 @@ const NewTripScreen = ({ route, navigation }) => {
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Información del Viaje</Text>
           
+          {/* 🔥 MOSTRAR INFORMACIÓN DE LA UBICACIÓN SI EXISTE */}
+          {selectedCountry && selectedCity && (
+            <View style={styles.locationInfoBox}>
+              <View style={styles.locationIcon}>
+                <Ionicons name="location" size={20} color="#4CAF50" />
+              </View>
+              <View style={styles.locationDetails}>
+                <Text style={styles.locationCountry}>{selectedCountry}</Text>
+                <Text style={styles.locationCity}>{selectedCity}</Text>
+              </View>
+              <TouchableOpacity onPress={openMap}>
+                <Ionicons name="pencil" size={18} color="#BB86FC" />
+              </TouchableOpacity>
+            </View>
+          )}
+          
           <TouchableOpacity style={styles.inputWithIcon} onPress={openMap}>
             <Text style={trip.destination ? styles.inputText : styles.placeholderText}>
-              {trip.destination || 'Seleccionar destino *'}
+              {trip.destination || 'Seleccionar destino en el mapa *'}
             </Text>
             <Ionicons name="map-outline" size={20} color="#BB86FC" />
           </TouchableOpacity>
@@ -595,7 +632,7 @@ const NewTripScreen = ({ route, navigation }) => {
   );
 };
 
-// 🔽 LOS ESTILOS SE MANTIENEN IGUAL 🔽
+// 🔽 ESTILOS ACTUALIZADOS 🔽
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -630,6 +667,40 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 15,
   },
+  // 🔥 NUEVO: Estilo para mostrar la ubicación seleccionada
+  locationInfoBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(30, 30, 30, 0.8)',
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+    borderRadius: 10,
+    padding: 12,
+    marginBottom: 15,
+  },
+  locationIcon: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'rgba(76, 175, 80, 0.2)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  locationDetails: {
+    flex: 1,
+  },
+  locationCountry: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: '600',
+    marginBottom: 2,
+  },
+  locationCity: {
+    color: '#FFFFFF',
+    fontSize: 14,
+    fontWeight: '500',
+  },
   input: {
     backgroundColor: '#1E1E1E',
     borderWidth: 1,
@@ -654,10 +725,12 @@ const styles = StyleSheet.create({
   inputText: {
     color: '#FFFFFF',
     fontSize: 16,
+    flex: 1,
   },
   placeholderText: {
     color: '#888',
     fontSize: 16,
+    flex: 1,
   },
   textArea: {
     height: 80,

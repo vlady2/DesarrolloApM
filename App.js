@@ -13,8 +13,10 @@ import AboutScreen from './src/screens/AboutScreen';
 import ArticulosProhibidosScreen from './src/screens/ArticulosProhibidosScreen';
 import EditMoveScreen from './src/screens/EditMoveScreen';
 import EditTripScreen from './src/screens/EditTripScreen';
+import helpSoportScreen from './src/screens/helpSoportScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import MaletasScreen from './src/screens/Maletascreen';
+import MapPickerScreen from './src/screens/MapPickerScreen';
 import MoveDetailScreen from './src/screens/MoveDetailScreen';
 import MyTripsScreen from './src/screens/MyTripsScreen';
 import NewBoxScreen from './src/screens/NewBoxScreen';
@@ -23,7 +25,6 @@ import NewMoveScreen from './src/screens/NewMoveScreen';
 import NewTripScreen from './src/screens/NewTripScreen';
 import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
-import helpSoportScreen from './src/screens/helpSoportScreen';
 
 
 const Stack = createNativeStackNavigator();
@@ -125,7 +126,15 @@ export default function App() {
         name="help"
         component={helpSoportScreen}
         options={{headerShown: false}}/>
+       
+        <Stack.Screen
+          name="MapPicker"
+          component={MapPickerScreen}
+          options={{ headerShown: false }}
+        />
+
       </Stack.Navigator>
+      
     </NavigationContainer>
   );
 }

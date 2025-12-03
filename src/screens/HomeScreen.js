@@ -194,6 +194,7 @@ const HomeScreen = ({ navigation }) => {
           {renderMenuItem(menuItems[2], 2)}
           {renderMenuItem(menuItems[3], 3)}
         </View>
+        
       </View>
     </SafeAreaView>
   );

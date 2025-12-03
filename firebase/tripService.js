@@ -11,6 +11,7 @@ import {
   where
 } from 'firebase/firestore';
 import { auth, db } from './auth';
+import { geocodeTripDestination } from './geocodingService';
 
 // Colección para los viajes
 const TRIPS_COLLECTION = 'trips';
@@ -29,30 +30,41 @@ export const saveTrip = async (tripData) => {
       throw new Error('Usuario no autenticado');
     }
 
-    const tripWithUser = {
+    // 1. GEOPOCODIFICAR DESTINO
+    console.log('📍 Geocodificando destino del viaje...');
+    const destinationCoords = await geocodeTripDestination(tripData.destination);
+
+    // 2. CREAR OBJETO CON COORDENADAS
+     const tripWithUser = {
       ...tripData,
       userId: user.uid,
       createdAt: new Date(),
-      updatedAt: new Date()
+      updatedAt: new Date(),
+      // Añadir coordenadas de destino si existen
+      ...(tripData.destinationCoords && { destinationCoords: tripData.destinationCoords })
     };
 
     console.log('🟡 Guardando viaje en Firestore...');
     console.log('👤 User ID:', user.uid);
+    console.log('📍 Coordenadas del destino:', 
+      destinationCoords 
+        ? `${destinationCoords.latitude}, ${destinationCoords.longitude}`
+        : 'No disponible'
+    );
     console.log('📝 Datos del viaje:', {
-      tripName: tripData.tripName,
       destination: tripData.destination,
-      itemsCount: tripData.items ? tripData.items.length : 0
+      startDate: tripData.startDate,
+      endDate: tripData.endDate
     });
     
-    // ✅ VERIFICACIÓN EXPLÍCITA DE LA COLECCIÓN
+    // 3. GUARDAR EN FIRESTORE
     const tripsCollection = collection(db, TRIPS_COLLECTION);
     console.log('📂 Intentando guardar en colección:', TRIPS_COLLECTION);
     
     const docRef = await addDoc(tripsCollection, tripWithUser);
     
-    console.log('🟢 ✅ VIAJE GUARDADO EXITOSAMENTE');
+    console.log('🟢 ✅ VIAJE GUARDADO CON COORDENADAS');
     console.log('📄 ID del documento:', docRef.id);
-    console.log('🎉 Viaje guardado correctamente en Firestore');
     
     return { id: docRef.id, ...tripWithUser };
   } catch (error) {
@@ -199,13 +211,27 @@ export const updateTrip = async (tripId, tripData) => {
   try {
     console.log('🟡 Actualizando viaje:', tripId);
     
+    // Si se actualiza el destino, geocodificar nuevamente
+    let coordinatesToUpdate = {};
+    
+    if (tripData.destination) {
+      console.log('📍 Geocodificando destino actualizado...');
+      
+      const destinationCoords = await geocodeTripDestination(tripData.destination);
+      
+      if (destinationCoords) {
+        coordinatesToUpdate.destinationCoords = destinationCoords;
+      }
+    }
+    
     const tripRef = doc(db, TRIPS_COLLECTION, tripId);
     await updateDoc(tripRef, {
       ...tripData,
+      ...coordinatesToUpdate,
       updatedAt: new Date()
     });
     
-    console.log('🟢 Viaje actualizado correctamente');
+    console.log('🟢 Viaje actualizado correctamente con coordenadas');
   } catch (error) {
     console.error('❌ Error actualizando viaje:', error);
     throw error;
@@ -266,5 +292,52 @@ export const checkFirestoreConnection = async () => {
   } catch (error) {
     console.log('❌ Conexión con Firestore: FALLÓ', error);
     return false;
+  }
+};
+ // Obtener coordenadas de un viaje (útil para mapas)
+export const getTripCoordinates = async (tripId) => {
+  try {
+    console.log('📍 Obteniendo coordenadas del viaje:', tripId);
+    
+    const trip = await getTripById(tripId);
+    
+    if (!trip.destinationCoords) {
+      console.log('⚠️ El viaje no tiene coordenadas guardadas');
+      
+      // Si no tiene coordenadas pero tiene destino, geocodificar y guardar
+      if (trip.destination) {
+        console.log('📍 Geocodificando destino para obtener coordenadas...');
+        const destinationCoords = await geocodeTripDestination(trip.destination);
+        
+        if (destinationCoords) {
+          // Actualizar el viaje con las nuevas coordenadas
+          await updateDoc(doc(db, TRIPS_COLLECTION, tripId), {
+            destinationCoords,
+            updatedAt: new Date()
+          });
+          
+          return {
+            destination: trip.destination,
+            destinationCoords
+          };
+        }
+      }
+      
+      return {
+        destination: trip.destination,
+        destinationCoords: null
+      };
+    }
+    
+    return {
+      destination: trip.destination,
+      destinationCoords: trip.destinationCoords
+    };
+  } catch (error) {
+    console.error('❌ Error obteniendo coordenadas del viaje:', error);
+    return {
+      destination: null,
+      destinationCoords: null
+    };
   }
 };
