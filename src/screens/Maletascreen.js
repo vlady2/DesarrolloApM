@@ -1,41 +1,125 @@
+// MaletasScreen.js
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    BackHandler,
-    FlatList,
-    Modal,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  BackHandler,
+  FlatList,
+  Modal,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
+import { deleteBox, getAllUserBoxes } from '../../firebase/boxService'; // ✅ NUEVA IMPORTACIÓN
 import { deleteLuggage, getAllUserLuggage } from '../../firebase/luggageService';
 
-// ✅ Categorías de maletas (igual que en NewMaletaScreen)
-const CATEGORIAS_MALETAS = [
-  { id: 'bolson', nombre: 'Bolson', icon: 'bag-outline' },
-  { id: 'mano', nombre: 'Maleta de Mano', icon: 'briefcase-outline' },
-  { id: 'mediana', nombre: 'Maleta Mediana', icon: 'business-outline' },
-  { id: 'grande', nombre: 'Maleta Grande', icon: 'archive-outline' },
-  { id: 'extra_grande', nombre: 'Maleta Extra Grande', icon: 'cube-outline' },
-  { id: 'caja', nombre: 'Caja', icon: 'cube-outline' }
+// ✅ Categorías combinadas (maletas + cajas)
+const CATEGORIAS_COMBINADAS = [
+  { id: 'bolson', nombre: 'Bolson', icon: 'bag-outline', type: 'luggage' },
+  { id: 'mano', nombre: 'Maleta de Mano', icon: 'briefcase-outline', type: 'luggage' },
+  { id: 'mediana', nombre: 'Maleta Mediana', icon: 'business-outline', type: 'luggage' },
+  { id: 'grande', nombre: 'Maleta Grande', icon: 'archive-outline', type: 'luggage' },
+  { id: 'extra_grande', nombre: 'Maleta Extra Grande', icon: 'cube-outline', type: 'luggage' },
+  { id: 'caja', nombre: 'Caja', icon: 'cube-outline', type: 'box' },
+  { id: 'fragile', nombre: 'Caja Frágil', icon: 'warning-outline', type: 'box' },
+  { id: 'small', nombre: 'Caja Pequeña', icon: 'cube-outline', type: 'box' },
+  { id: 'medium', nombre: 'Caja Mediana', icon: 'cube', type: 'box' },
+  { id: 'large', nombre: 'Caja Grande', icon: 'archive-outline', type: 'box' },
+  { id: 'wardrobe', nombre: 'Caja Ropero', icon: 'shirt-outline', type: 'box' }
 ];
 
-// ✅ FUNCIÓN CENTRAL MEJORADA: Verificar estado del viaje con permisos
-const getTripStatus = (trip) => {
-  if (!trip.startDate) {
+// ✅ FUNCIÓN CENTRAL: Verificar estado del viaje o mudanza
+const getItemStatus = (item) => {
+  const isBox = item.itemType === 'box' || item.type === 'caja';
+  
+  // Para cajas (mudanzas)
+  if (isBox) {
+    if (!item.moveDate) {
+      return { 
+        status: 'Planificada', 
+        color: '#FFA500', 
+        icon: 'calendar-outline', 
+        canEdit: true, 
+        canDelete: true
+      };
+    }
+    
+    const today = new Date();
+    let moveDate;
+    
+    try {
+      if (item.moveDate.includes('/')) {
+        const [day, month, year] = item.moveDate.split('/');
+        moveDate = new Date(year, month - 1, day);
+      } else {
+        moveDate = new Date(item.moveDate);
+      }
+    } catch (error) {
+      return { 
+        status: 'Planificada', 
+        color: '#FFA500', 
+        icon: 'calendar-outline', 
+        canEdit: true, 
+        canDelete: true
+      };
+    }
+    
+    if (isNaN(moveDate.getTime())) {
+      return { 
+        status: 'Planificada', 
+        color: '#FFA500', 
+        icon: 'calendar-outline', 
+        canEdit: true, 
+        canDelete: true
+      };
+    }
+    
+    const todayStr = today.toDateString();
+    const moveDateStr = moveDate.toDateString();
+    
+    if (todayStr === moveDateStr) {
+      return { 
+        status: 'Hoy', 
+        color: '#F44336', 
+        icon: 'warning', 
+        canEdit: false, 
+        canDelete: false
+      };
+    }
+    
+    if (today < moveDate) {
+      return { 
+        status: 'Pendiente', 
+        color: '#FFA500', 
+        icon: 'time-outline', 
+        canEdit: true, 
+        canDelete: true
+      };
+    }
+    
+    if (today > moveDate) {
+      return { 
+        status: 'Completada', 
+        color: '#888', 
+        icon: 'checkmark-done', 
+        canEdit: false, 
+        canDelete: false
+      };
+    }
+  }
+  
+  // Para maletas (viajes)
+  if (!item.startDate) {
     return { 
       status: 'Planificado', 
       color: '#FFA500', 
       icon: 'calendar-outline', 
       canEdit: true, 
-      canDelete: true,
-      canEditLuggage: true,
-      canDeleteLuggage: true
+      canDelete: true
     };
   }
   
@@ -43,18 +127,18 @@ const getTripStatus = (trip) => {
   let startDate, endDate;
   
   try {
-    if (trip.startDate.includes('/')) {
-      const [day, month, year] = trip.startDate.split('/');
+    if (item.startDate.includes('/')) {
+      const [day, month, year] = item.startDate.split('/');
       startDate = new Date(year, month - 1, day);
     } else {
-      startDate = new Date(trip.startDate);
+      startDate = new Date(item.startDate);
     }
     
-    if (trip.endDate && trip.endDate.includes('/')) {
-      const [day, month, year] = trip.endDate.split('/');
+    if (item.endDate && item.endDate.includes('/')) {
+      const [day, month, year] = item.endDate.split('/');
       endDate = new Date(year, month - 1, day);
-    } else if (trip.endDate) {
-      endDate = new Date(trip.endDate);
+    } else if (item.endDate) {
+      endDate = new Date(item.endDate);
     }
   } catch (error) {
     return { 
@@ -62,9 +146,7 @@ const getTripStatus = (trip) => {
       color: '#FFA500', 
       icon: 'calendar-outline', 
       canEdit: true, 
-      canDelete: true,
-      canEditLuggage: true,
-      canDeleteLuggage: true
+      canDelete: true
     };
   }
   
@@ -74,9 +156,21 @@ const getTripStatus = (trip) => {
       color: '#FFA500', 
       icon: 'calendar-outline', 
       canEdit: true, 
-      canDelete: true,
-      canEditLuggage: true,
-      canDeleteLuggage: true
+      canDelete: true
+    };
+  }
+  
+  const todayStr = today.toDateString();
+  const startDateStr = startDate.toDateString();
+  const endDateStr = endDate ? endDate.toDateString() : null;
+  
+  if (todayStr === startDateStr) {
+    return { 
+      status: 'Hoy', 
+      color: '#F44336', 
+      icon: 'warning', 
+      canEdit: false, 
+      canDelete: false
     };
   }
   
@@ -86,9 +180,7 @@ const getTripStatus = (trip) => {
       color: '#FFA500', 
       icon: 'time-outline', 
       canEdit: true, 
-      canDelete: true,
-      canEditLuggage: true,
-      canDeleteLuggage: true
+      canDelete: true
     };
   }
   
@@ -98,9 +190,7 @@ const getTripStatus = (trip) => {
       color: '#888', 
       icon: 'checkmark-done', 
       canEdit: false, 
-      canDelete: false,
-      canEditLuggage: false,
-      canDeleteLuggage: false
+      canDelete: false
     };
   }
   
@@ -110,9 +200,7 @@ const getTripStatus = (trip) => {
       color: '#4CAF50', 
       icon: 'airplane', 
       canEdit: false, 
-      canDelete: false,
-      canEditLuggage: false,
-      canDeleteLuggage: false
+      canDelete: false
     };
   }
   
@@ -121,23 +209,21 @@ const getTripStatus = (trip) => {
     color: '#FFA500', 
     icon: 'calendar-outline', 
     canEdit: true, 
-    canDelete: true,
-    canEditLuggage: true,
-    canDeleteLuggage: true
+    canDelete: true
   };
 };
 
 const MaletasScreen = ({ navigation }) => {
-  const [allLuggage, setAllLuggage] = useState([]);
-  const [filteredLuggage, setFilteredLuggage] = useState([]);
+  const [allItems, setAllItems] = useState([]);
+  const [filteredItems, setFilteredItems] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all');
   const [modalVisible, setModalVisible] = useState(false);
-  const [selectedLuggage, setSelectedLuggage] = useState(null);
+  const [selectedItem, setSelectedItem] = useState(null);
+  const [deleting, setDeleting] = useState(false); // ✅ NUEVO: Estado para controlar eliminación
   
   const insets = useSafeAreaInsets();
 
-  // ✅ Manejar back button
   useEffect(() => {
     const backAction = () => {
       if (navigation.isFocused()) {
@@ -156,50 +242,79 @@ const MaletasScreen = ({ navigation }) => {
   }, [navigation]);
 
   useEffect(() => {
-    loadAllLuggage();
+    loadAllItems();
   }, []);
 
   useEffect(() => {
-    filterLuggage();
-  }, [allLuggage, activeFilter]);
+    filterItems();
+  }, [allItems, activeFilter]);
 
-  const loadAllLuggage = async () => {
+  const loadAllItems = async () => {
     try {
       setLoading(true);
-      const luggage = await getAllUserLuggage();
-      setAllLuggage(luggage);
+      
+      // Cargar maletas y cajas en paralelo
+      const [luggage, boxes] = await Promise.all([
+        getAllUserLuggage().catch(() => []),
+        getAllUserBoxes().catch(() => [])
+      ]);
+      
+      // Combinar y agregar tipo para diferenciar
+      const combinedItems = [
+        ...luggage.map(item => ({ 
+          ...item, 
+          itemType: 'luggage',
+          categoria: item.categoria || 'caja' // Default para maletas sin categoría
+        })),
+        ...boxes.map(item => ({ 
+          ...item, 
+          itemType: 'box',
+          categoria: item.tipo || 'caja', // Usar 'tipo' como 'categoria' para cajas
+          articulos: item.items || [], // Usar 'items' como 'articulos' para cajas
+          tripName: item.moveName || 'Mudanza',
+          tripDestination: `${item.moveOrigin || ''} → ${item.moveDestination || ''}`,
+          tripDates: { start: item.moveDate }
+        }))
+      ];
+      
+      console.log('📦 Maletas cargadas:', luggage.length);
+      console.log('📦 Cajas cargadas:', boxes.length);
+      console.log('📦 Total elementos:', combinedItems.length);
+      
+      setAllItems(combinedItems);
     } catch (error) {
-      console.log('❌ Error cargando maletas:', error);
-      Alert.alert('Error', 'No se pudieron cargar las maletas');
+      console.log('❌ Error cargando elementos:', error);
+      Alert.alert('Error', 'No se pudieron cargar los elementos');
     } finally {
       setLoading(false);
     }
   };
 
-  const filterLuggage = () => {
+  const filterItems = () => {
     if (activeFilter === 'all') {
-      setFilteredLuggage(allLuggage);
+      setFilteredItems(allItems);
     } else {
-      const filtered = allLuggage.filter(item => item.categoria === activeFilter);
-      setFilteredLuggage(filtered);
+      const filtered = allItems.filter(item => item.categoria === activeFilter);
+      setFilteredItems(filtered);
     }
   };
 
-  // ✅ Calcular contadores (como en MyTripsScreen)
   const getCounters = () => {
-    const totalAll = allLuggage.length;
-    const currentCount = filteredLuggage.length;
+    const totalAll = allItems.length;
+    const currentCount = filteredItems.length;
 
     const countersByType = {};
-    CATEGORIAS_MALETAS.forEach(cat => {
-      countersByType[cat.id] = allLuggage.filter(item => item.categoria === cat.id).length;
+    CATEGORIAS_COMBINADAS.forEach(cat => {
+      countersByType[cat.id] = allItems.filter(item => item.categoria === cat.id).length;
     });
 
     let text = '';
     if (activeFilter === 'all') {
-      text = `${currentCount} de ${totalAll} maletas`;
+      const luggageCount = allItems.filter(item => item.itemType === 'luggage').length;
+      const boxCount = allItems.filter(item => item.itemType === 'box').length;
+      text = `${currentCount} elementos (${luggageCount} maletas, ${boxCount} cajas)`;
     } else {
-      const categoria = CATEGORIAS_MALETAS.find(cat => cat.id === activeFilter);
+      const categoria = CATEGORIAS_COMBINADAS.find(cat => cat.id === activeFilter);
       text = `${currentCount} de ${countersByType[activeFilter]} ${categoria?.nombre.toLowerCase()}`;
     }
 
@@ -211,213 +326,289 @@ const MaletasScreen = ({ navigation }) => {
     };
   };
 
-  // ✅ FUNCIÓN ACTUALIZADA: Determinar estado del viaje desde los datos de la maleta
-  const getTripStatusFromLuggage = (luggage) => {
-    const tripData = {
-      startDate: luggage.tripDates?.start,
-      endDate: luggage.tripDates?.end
-    };
-    return getTripStatus(tripData);
+  const getItemStatusFromItem = (item) => {
+    return getItemStatus(item);
   };
 
-  // ✅ FUNCIÓN MEJORADA: Verificar estado del viaje antes de editar
-  const handleEditLuggage = (luggage) => {
-    const tripStatus = getTripStatusFromLuggage(luggage);
+  const handleEditItem = (item) => {
+    const itemStatus = getItemStatusFromItem(item);
     
-    if (!tripStatus.canEditLuggage) {
+    if (!itemStatus.canEdit) {
       Alert.alert(
-        `Viaje ${tripStatus.status}`,
-        `No puedes editar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
+        `Elemento ${itemStatus.status}`,
+        `No puedes editar ${item.itemType === 'box' ? 'cajas' : 'maletas'} de ${item.itemType === 'box' ? 'mudanzas' : 'viajes'} que están ${itemStatus.status.toLowerCase()}.`,
         [{ text: 'Entendido' }]
       );
       return;
     }
     
     closeModal();
-    navigation.navigate('NewMaleta', { 
-      tripId: luggage.tripId,
-      destination: luggage.tripDestination,
-      purpose: luggage.tripName,
-      trip: {
-        id: luggage.tripId,
-        destination: luggage.tripDestination,
-        purpose: luggage.tripName,
-        startDate: luggage.tripDates?.start,
-        endDate: luggage.tripDates?.end
-      },
-      luggageToEdit: luggage,
-      mode: 'edit'
-    });
+    
+    if (item.itemType === 'box') {
+      // Navegar a editar caja
+      navigation.navigate('NewBox', { 
+        moveId: item.moveId,
+        origin: item.moveOrigin,
+        destination: item.moveDestination,
+        moveType: item.moveType,
+        originScreen: 'Maletas',
+        boxToEdit: item,
+        mode: 'edit'
+      });
+    } else {
+      // Navegar a editar maleta
+      navigation.navigate('NewMaleta', { 
+        tripId: item.tripId,
+        destination: item.tripDestination,
+        purpose: item.tripName,
+        trip: {
+          id: item.tripId,
+          destination: item.tripDestination,
+          purpose: item.tripName,
+          startDate: item.tripDates?.start,
+          endDate: item.tripDates?.end
+        },
+        luggageToEdit: item,
+        mode: 'edit'
+      });
+    }
   };
 
-  // ✅ Abrir modal con maleta seleccionada
-  const openLuggageModal = (luggage) => {
-    setSelectedLuggage(luggage);
+  const openItemModal = (item) => {
+    setSelectedItem(item);
     setModalVisible(true);
+    setDeleting(false); // ✅ RESETEAR estado de eliminación
   };
 
-  // ✅ Cerrar modal
   const closeModal = () => {
     setModalVisible(false);
-    setSelectedLuggage(null);
+    setSelectedItem(null);
+    setDeleting(false); // ✅ RESETEAR estado de eliminación
   };
 
-  // ✅ FUNCIÓN MEJORADA: Eliminar maleta con verificación de estado
-  const handleDeleteLuggage = async (luggage) => {
-    const tripStatus = getTripStatusFromLuggage(luggage);
-    
-    if (!tripStatus.canDeleteLuggage) {
+  // ✅ FUNCIÓN MEJORADA: Manejar confirmación de eliminación con botón cancelar funcional
+  const handleDeleteItem = (item) => {
+    const itemStatus = getItemStatusFromItem(item);
+
+    if (!itemStatus.canDelete) {
       Alert.alert(
-        `Viaje ${tripStatus.status}`,
-        `No puedes eliminar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
+        `Elemento ${itemStatus.status}`,
+        `No puedes eliminar ${item.itemType === 'box' ? 'cajas' : 'maletas'} de ${item.itemType === 'box' ? 'mudanzas' : 'viajes'} que están ${itemStatus.status.toLowerCase()}.`,
         [{ text: 'Entendido' }]
       );
       return;
     }
+    // ✅ Cerrar el modal primero
+    closeModal();
 
+    // ✅ Esperar un momento para que el modal se cierre completamente
+  setTimeout(() => {
+    // ✅ Ahora mostrar la alerta de confirmación
     Alert.alert(
-      'Eliminar Maleta',
-      `¿Estás seguro de eliminar esta ${getCategoriaNombre(luggage.categoria)}?`,
+      'Eliminar Elemento',
+      `¿Estás seguro de eliminar esta ${getCategoriaNombre(item.categoria)}?`,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Cancelar', 
+          style: 'cancel',
+          onPress: () => {
+            console.log('✅ Eliminación cancelada por el usuario');
+            // NO hacer nada - el usuario canceló
+          }
+        },
         { 
           text: 'Eliminar', 
+          style: 'destructive',
           onPress: async () => {
-            try {
-              await deleteLuggage(luggage.tripId, luggage.id);
-              setAllLuggage(allLuggage.filter(item => item.id !== luggage.id));
-              closeModal();
-              Alert.alert('✅', 'Maleta eliminada correctamente');
-            } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar la maleta');
-            }
-          },
-          style: 'destructive'
+            console.log('✅ Usuario confirmó eliminación');
+            await performDeleteItem(item);
+          }
         }
-      ]
+      ],
+      // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
+      { cancelable: false }
     );
-  };
+  }, 100); // Esperar 300ms para que el modal se cierre
+};
 
-  // ✅ Obtener nombre de categoría
+  // ✅ FUNCIÓN SEPARADA: Ejecutar la eliminación
+const performDeleteItem = async (item) => {
+  try {
+    setDeleting(true);
+    
+    if (item.itemType === 'box') {
+      console.log('🟡 Eliminando caja:', item.id, 'de mudanza:', item.moveId);
+      await deleteBox(item.moveId, item.id);
+      console.log('🟢 Caja eliminada');
+    } else {
+      console.log('🟡 Eliminando maleta:', item.id, 'de viaje:', item.tripId);
+      await deleteLuggage(item.tripId, item.id);
+      console.log('🟢 Maleta eliminada');
+    }
+    
+    // ✅ Actualizar la lista después de eliminar
+    setAllItems(prevItems => prevItems.filter(i => i.id !== item.id));
+    
+    // ✅ Mostrar confirmación
+    Alert.alert('✅', 'Elemento eliminado correctamente');
+    
+  } catch (error) {
+    console.error('❌ Error eliminando elemento:', error);
+    Alert.alert('Error', 'No se pudo eliminar el elemento');
+  } finally {
+    setDeleting(false);
+  }
+};
+
   const getCategoriaNombre = (categoriaId) => {
-    const categoria = CATEGORIAS_MALETAS.find(cat => cat.id === categoriaId);
-    return categoria?.nombre || 'Maleta';
+    const categoria = CATEGORIAS_COMBINADAS.find(cat => cat.id === categoriaId);
+    return categoria?.nombre || 'Elemento';
   };
 
-  // ✅ Obtener icono de categoría
   const getCategoriaIcon = (categoriaId) => {
-    const categoria = CATEGORIAS_MALETAS.find(cat => cat.id === categoriaId);
+    const categoria = CATEGORIAS_COMBINADAS.find(cat => cat.id === categoriaId);
     return categoria?.icon || 'bag-outline';
   };
 
-  // ✅ Navegación normal de regreso
+  const getItemIcon = (item) => {
+    if (item.itemType === 'box') {
+      return item.isFragile ? 'warning' : 'cube';
+    } else {
+      const categoria = CATEGORIAS_COMBINADAS.find(cat => cat.id === item.categoria);
+      return categoria?.icon || 'bag-outline';
+    }
+  };
+
   const goBack = () => {
     navigation.navigate('Home');
   };
 
-  // ✅ MODIFICADO: Renderizar item de maleta con estado del viaje
-  const renderLuggageItem = ({ item }) => {
+  const renderItem = ({ item }) => {
     const categoriaNombre = getCategoriaNombre(item.categoria);
-    const categoriaIcon = getCategoriaIcon(item.categoria);
-    const tripStatus = getTripStatusFromLuggage(item);
+    const itemIcon = getItemIcon(item);
+    const itemStatus = getItemStatusFromItem(item);
+    const isBox = item.itemType === 'box';
+    const destination = isBox 
+      ? item.tripDestination 
+      : item.tripDestination;
+    const name = isBox 
+      ? item.moveName || 'Mudanza'
+      : item.tripName || 'Viaje';
 
     return (
       <TouchableOpacity 
-        style={styles.luggageItem}
-        onPress={() => openLuggageModal(item)}
+        style={[styles.item, isBox && styles.boxItem]}
+        onPress={() => openItemModal(item)}
       >
-        <View style={styles.luggageHeader}>
-          <View style={styles.typeBadge}>
-            <Ionicons name={categoriaIcon} size={16} color="#2196F3" />
-            <Text style={styles.typeText}>{categoriaNombre}</Text>
+        <View style={styles.itemHeader}>
+          <View style={[styles.typeBadge, isBox && styles.boxBadge]}>
+            <Ionicons 
+              name={itemIcon} 
+              size={16} 
+              color={isBox ? '#FF6B6B' : '#2196F3'} 
+            />
+            <Text style={[styles.typeText, isBox && styles.boxText]}>
+              {isBox ? 'Caja' : 'Maleta'}
+            </Text>
           </View>
           
-          {/* ✅ MOSTRAR ESTADO DEL VIAJE */}
-          <View style={[styles.statusBadge, { backgroundColor: tripStatus.color }]}>
-            <Ionicons name={tripStatus.icon} size={10} color="#FFFFFF" />
-            <Text style={styles.statusText}>{tripStatus.status}</Text>
+          <View style={[styles.statusBadge, { backgroundColor: itemStatus.color }]}>
+            <Ionicons name={itemStatus.icon} size={10} color="#FFFFFF" />
+            <Text style={styles.statusText}>{itemStatus.status}</Text>
           </View>
         </View>
 
-        <View style={styles.luggageInfo}>
-          <Text style={styles.tripName}>{item.tripName}</Text>
+        <View style={styles.itemInfo}>
+          <Text style={styles.itemName}>{name}</Text>
           
-          <View style={styles.destinationRow}>
-            <Ionicons name="location" size={14} color="#888" />
-            <Text style={styles.destination}>{item.tripDestination}</Text>
-          </View>
-
-          <View style={styles.datesRow}>
-            <Ionicons name="calendar" size={14} color="#888" />
-            <Text style={styles.dates}>
-              {item.tripDates?.start} {item.tripDates?.end ? `- ${item.tripDates.end}` : ''}
-            </Text>
-          </View>
+          {destination && (
+            <View style={styles.destinationRow}>
+              <Ionicons name="location" size={14} color="#888" />
+              <Text style={styles.destination}>{destination}</Text>
+            </View>
+          )}
 
           <View style={styles.footerRow}>
             <Text style={styles.articleCount}>
               {item.articulos?.length || 0} artículos
             </Text>
+            {isBox && item.isFragile && (
+              <View style={styles.fragileBadge}>
+                <Ionicons name="warning" size={12} color="#FFA500" />
+                <Text style={styles.fragileText}>Frágil</Text>
+              </View>
+            )}
           </View>
         </View>
       </TouchableOpacity>
     );
   };
 
-  // ✅ FUNCIÓN ACTUALIZADA: Renderizar botones de acción con verificación de estado
-  const renderModalActions = (luggage) => {
-    const tripStatus = getTripStatusFromLuggage(luggage);
-    const canEdit = tripStatus.canEditLuggage;
-    const canDelete = tripStatus.canDeleteLuggage;
+  const renderModalActions = (item) => {
+  const itemStatus = getItemStatusFromItem(item);
+  const canEdit = itemStatus.canEdit;
+  const canDelete = itemStatus.canDelete;
+  const isBox = item.itemType === 'box';
 
-    return (
-      <View style={styles.actionButtons}>
-        <TouchableOpacity 
-          style={[
-            styles.actionButton, 
-            styles.editButton,
-            !canEdit && styles.disabledButton
-          ]}
-          onPress={() => handleEditLuggage(luggage)}
-          disabled={!canEdit}
-        >
-          <Ionicons 
-            name="create" 
-            size={20} 
-            color={!canEdit ? "#666" : "#FFFFFF"} 
-          />
-          <Text style={[
-            styles.actionButtonText,
-            !canEdit && styles.disabledText
-          ]}>
-            {!canEdit ? `Viaje ${tripStatus.status}` : 'Editar'}
-          </Text>
-        </TouchableOpacity>
+  return (
+    <View style={styles.actionButtons}>
+      <TouchableOpacity 
+        style={[
+          styles.actionButton, 
+          styles.editButton,
+          !canEdit && styles.disabledButton
+        ]}
+        onPress={() => {
+          console.log('✏️ Editando elemento:', item.id);
+          handleEditItem(item);
+        }}
+        disabled={!canEdit || deleting}
+      >
+        <Ionicons 
+          name="create" 
+          size={20} 
+          color={!canEdit ? "#666" : "#FFFFFF"} 
+        />
+        <Text style={[
+          styles.actionButtonText,
+          !canEdit && styles.disabledText
+        ]}>
+          {!canEdit ? `${isBox ? 'Mudanza' : 'Viaje'} ${itemStatus.status}` : 'Editar'}
+        </Text>
+      </TouchableOpacity>
 
-        <TouchableOpacity 
-          style={[
-            styles.actionButton, 
-            styles.deleteButton,
-            !canDelete && styles.disabledButton
-          ]}
-          onPress={() => handleDeleteLuggage(luggage)}
-          disabled={!canDelete}
-        >
+      <TouchableOpacity 
+        style={[
+          styles.actionButton, 
+          styles.deleteButton,
+          (!canDelete || deleting) && styles.disabledButton
+        ]}
+        onPress={() => {
+          console.log('🗑️ Solicitando eliminación de elemento:', item.id);
+          handleDeleteItem(item);
+        }}
+        disabled={!canDelete || deleting}
+      >
+        {deleting ? (
+          <ActivityIndicator size="small" color="#FFFFFF" />
+        ) : (
           <Ionicons 
             name="trash" 
             size={20} 
             color={!canDelete ? "#666" : "#FFFFFF"} 
           />
-          <Text style={[
-            styles.actionButtonText,
-            !canDelete && styles.disabledText
-          ]}>
-            {!canDelete ? `Viaje ${tripStatus.status}` : 'Eliminar'}
-          </Text>
-        </TouchableOpacity>
-      </View>
-    );
-  };
+        )}
+        <Text style={[
+          styles.actionButtonText,
+          (!canDelete || deleting) && styles.disabledText
+        ]}>
+          {!canDelete ? `${isBox ? 'Mudanza' : 'Viaje'} ${itemStatus.status}` : 
+           deleting ? 'Eliminando...' : 'Eliminar'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
 
   if (loading) {
     return (
@@ -425,7 +616,7 @@ const MaletasScreen = ({ navigation }) => {
         <StatusBar backgroundColor="#121212" barStyle="light-content" />
         <View style={styles.centerContainer}>
           <ActivityIndicator size="large" color="#BB86FC" />
-          <Text style={styles.loadingText}>Cargando maletas...</Text>
+          <Text style={styles.loadingText}>Cargando elementos...</Text>
         </View>
       </View>
     );
@@ -437,7 +628,6 @@ const MaletasScreen = ({ navigation }) => {
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
       
-      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={goBack}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
@@ -446,14 +636,32 @@ const MaletasScreen = ({ navigation }) => {
         <View style={styles.placeholder} />
       </View>
 
-      {/* Contador */}
       <View style={styles.counterContainer}>
         <Text style={styles.counterText}>{counters.text}</Text>
       </View>
 
-      {/* Filtros */}
       <View style={styles.filterContainer}>
-        {CATEGORIAS_MALETAS.map((categoria) => (
+        <TouchableOpacity 
+          style={[
+            styles.filterButton, 
+            activeFilter === 'all' && styles.filterButtonActive
+          ]}
+          onPress={() => setActiveFilter('all')}
+        >
+          <Ionicons 
+            name="grid" 
+            size={16} 
+            color={activeFilter === 'all' ? '#FFFFFF' : '#BB86FC'} 
+          />
+          <Text style={[
+            styles.filterText, 
+            activeFilter === 'all' && styles.filterTextActive
+          ]}>
+            Todos
+          </Text>
+        </TouchableOpacity>
+        
+        {CATEGORIAS_COMBINADAS.slice(0, 5).map((categoria) => (
           <TouchableOpacity 
             key={categoria.id}
             style={[
@@ -467,22 +675,16 @@ const MaletasScreen = ({ navigation }) => {
               size={16} 
               color={activeFilter === categoria.id ? '#FFFFFF' : '#2196F3'} 
             />
-            <Text style={[
-              styles.filterText, 
-              activeFilter === categoria.id && styles.filterTextActive
-            ]}>
-              {categoria.nombre}
-            </Text>
           </TouchableOpacity>
         ))}
       </View>
 
-      {filteredLuggage.length === 0 ? (
+      {filteredItems.length === 0 ? (
         <View style={styles.centerContainer}>
-          <Ionicons name="bag-outline" size={64} color="#666" />
+          <Ionicons name="cube-outline" size={64} color="#666" />
           <Text style={styles.emptyText}>
             {activeFilter === 'all' 
-              ? 'No tienes maletas guardadas' 
+              ? 'No tienes maletas ni cajas guardadas' 
               : `No tienes ${getCategoriaNombre(activeFilter).toLowerCase()}s`
             }
           </Text>
@@ -497,17 +699,16 @@ const MaletasScreen = ({ navigation }) => {
         </View>
       ) : (
         <FlatList
-          data={filteredLuggage}
-          renderItem={renderLuggageItem}
+          data={filteredItems}
+          renderItem={renderItem}
           keyExtractor={(item) => item.id}
           contentContainerStyle={styles.listContainer}
           refreshing={loading}
-          onRefresh={loadAllLuggage}
+          onRefresh={loadAllItems}
           style={styles.flatList}
         />
       )}
 
-      {/* Modal de Detalles y Acciones */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -517,37 +718,47 @@ const MaletasScreen = ({ navigation }) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             
-            {/* Header del Modal */}
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>
-                {selectedLuggage ? getCategoriaNombre(selectedLuggage.categoria) : ''}
+                {selectedItem ? getCategoriaNombre(selectedItem.categoria) : ''}
               </Text>
               <TouchableOpacity onPress={closeModal} style={styles.closeButton}>
                 <Ionicons name="close" size={24} color="#FFFFFF" />
               </TouchableOpacity>
             </View>
 
-            {/* Información del Viaje */}
-            {selectedLuggage && (
-              <View style={styles.tripInfoModal}>
-                <Text style={styles.tripNameModal}>{selectedLuggage.tripName}</Text>
-                <Text style={styles.tripDestinationModal}>{selectedLuggage.tripDestination}</Text>
-                {/* ✅ MOSTRAR ESTADO DEL VIAJE EN MODAL */}
-                <View style={[styles.statusBadgeModal, { backgroundColor: getTripStatusFromLuggage(selectedLuggage).color }]}>
-                  <Ionicons name={getTripStatusFromLuggage(selectedLuggage).icon} size={12} color="#FFFFFF" />
-                  <Text style={styles.statusTextModal}>{getTripStatusFromLuggage(selectedLuggage).status}</Text>
+            {selectedItem && (
+              <View style={styles.itemInfoModal}>
+                <Text style={styles.itemNameModal}>
+                  {selectedItem.itemType === 'box' 
+                    ? (selectedItem.moveName || 'Mudanza') 
+                    : (selectedItem.tripName || 'Viaje')}
+                </Text>
+                <Text style={styles.itemDestinationModal}>
+                  {selectedItem.itemType === 'box'
+                    ? `${selectedItem.moveOrigin || ''} → ${selectedItem.moveDestination || ''}`
+                    : selectedItem.tripDestination}
+                </Text>
+                <View style={[styles.statusBadgeModal, { backgroundColor: getItemStatusFromItem(selectedItem).color }]}>
+                  <Ionicons name={getItemStatusFromItem(selectedItem).icon} size={12} color="#FFFFFF" />
+                  <Text style={styles.statusTextModal}>{getItemStatusFromItem(selectedItem).status}</Text>
                 </View>
+                {selectedItem.isFragile && selectedItem.itemType === 'box' && (
+                  <View style={styles.fragileModalBadge}>
+                    <Ionicons name="warning" size={14} color="#FFA500" />
+                    <Text style={styles.fragileModalText}>Caja Frágil</Text>
+                  </View>
+                )}
               </View>
             )}
 
-            {/* Lista de Artículos */}
-            {selectedLuggage && (
+            {selectedItem && (
               <View style={styles.articlesSection}>
                 <Text style={styles.articlesTitle}>
-                  Artículos ({selectedLuggage.articulos?.length || 0})
+                  Artículos ({selectedItem.articulos?.length || 0})
                 </Text>
                 <FlatList
-                  data={selectedLuggage.articulos || []}
+                  data={selectedItem.articulos || []}
                   renderItem={({ item }) => (
                     <View style={styles.articleItem}>
                       <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
@@ -561,9 +772,7 @@ const MaletasScreen = ({ navigation }) => {
               </View>
             )}
 
-            {/* ✅ MODIFICADO: Botones de Acción con verificación de estado */}
-            {selectedLuggage && renderModalActions(selectedLuggage)}
-
+            {selectedItem && renderModalActions(selectedItem)}
           </View>
         </View>
       </Modal>
@@ -611,7 +820,6 @@ const styles = StyleSheet.create({
   },
   filterContainer: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     padding: 15,
     gap: 8,
   },
@@ -643,7 +851,7 @@ const styles = StyleSheet.create({
   flatList: {
     flex: 1,
   },
-  luggageItem: {
+  item: {
     backgroundColor: '#1E1E1E',
     marginBottom: 15,
     padding: 16,
@@ -651,7 +859,10 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#2196F3',
   },
-  luggageHeader: {
+  boxItem: {
+    borderLeftColor: '#FF6B6B',
+  },
+  itemHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
@@ -666,12 +877,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 4,
   },
+  boxBadge: {
+    backgroundColor: '#2A2A2A',
+  },
   typeText: {
     fontSize: 12,
     fontWeight: 'bold',
     color: '#2196F3',
   },
-  // ✅ NUEVOS ESTILOS: Estado del viaje
+  boxText: {
+    color: '#FF6B6B',
+  },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -700,15 +916,10 @@ const styles = StyleSheet.create({
     fontSize: 10,
     fontWeight: 'bold',
   },
-  articleCount: {
-    fontSize: 12,
-    color: '#FF9800',
-    fontWeight: '500',
-  },
-  luggageInfo: {
+  itemInfo: {
     flex: 1,
   },
-  tripName: {
+  itemName: {
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
@@ -724,21 +935,30 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#888',
   },
-  datesRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  dates: {
-    fontSize: 14,
-    color: '#BB86FC',
-  },
-  // ✅ NUEVO ESTILO: Footer row
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginTop: 8,
+  },
+  articleCount: {
+    fontSize: 12,
+    color: '#FF9800',
+    fontWeight: '500',
+  },
+  fragileBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 165, 0, 0.1)',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+    gap: 4,
+  },
+  fragileText: {
+    fontSize: 10,
+    color: '#FFA500',
+    fontWeight: '500',
   },
   emptyText: {
     fontSize: 18,
@@ -762,14 +982,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     fontSize: 16,
   },
-  // ✅ NUEVOS ESTILOS: Botones deshabilitados
   disabledButton: {
     backgroundColor: '#666',
   },
   disabledText: {
     color: '#999',
   },
-  // Modal Styles
   modalOverlay: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.8)',
@@ -801,22 +1019,38 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
-  tripInfoModal: {
+  itemInfoModal: {
     padding: 20,
     backgroundColor: 'rgba(187, 134, 252, 0.1)',
     margin: 20,
     borderRadius: 10,
     marginTop: 10,
   },
-  tripNameModal: {
+  itemNameModal: {
     color: '#BB86FC',
     fontSize: 16,
     fontWeight: 'bold',
     marginBottom: 5,
   },
-  tripDestinationModal: {
+  itemDestinationModal: {
     color: '#BB86FC',
     fontSize: 14,
+  },
+  fragileModalBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(255, 165, 0, 0.2)',
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 10,
+    gap: 6,
+    alignSelf: 'flex-start',
+    marginTop: 8,
+  },
+  fragileModalText: {
+    fontSize: 12,
+    color: '#FFA500',
+    fontWeight: '500',
   },
   articlesSection: {
     paddingHorizontal: 20,

@@ -10,11 +10,15 @@ import RegisterScreen from './src/screens/auth_users/RegisterScreen';
 
 // Main Screens
 import ArticulosProhibidosScreen from './src/screens/ArticulosProhibidosScreen';
+import EditMoveScreen from './src/screens/EditMoveScreen';
 import EditTripScreen from './src/screens/EditTripScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import MaletasScreen from './src/screens/Maletascreen';
+import MoveDetailScreen from './src/screens/MoveDetailScreen';
 import MyTripsScreen from './src/screens/MyTripsScreen';
+import NewBoxScreen from './src/screens/NewBoxScreen';
 import NewMaletaScreen from './src/screens/NewMaletaScreen';
+import NewMoveScreen from './src/screens/NewMoveScreen';
 import NewTripScreen from './src/screens/NewTripScreen';
 import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
@@ -76,6 +80,11 @@ export default function App() {
           component={NewTripScreen}
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="NewMove"
+          component={NewMoveScreen}
+          options={{ headerShown: false }}
+        />
          <Stack.Screen 
           name="Setting" 
           component={SettingScreen}
@@ -90,6 +99,21 @@ export default function App() {
         <Stack.Screen 
           name="Box" 
           component={MaletasScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="NewBox" 
+          component={NewBoxScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="MoveDetail" 
+          component={MoveDetailScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen 
+          name="EditMove" 
+          component={EditMoveScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>

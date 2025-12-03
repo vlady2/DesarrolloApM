@@ -130,7 +130,9 @@ const HomeScreen = ({ navigation }) => {
         },
         {
           text: 'Mudanza',
-          onPress: () => console.log('Nueva Mudanza - En desarrollo')
+          onPress: () => navigation.navigate('NewMove', {
+            origin: 'Home' // 👈 PASAR ORIGEN A NEWMOVE
+        })
         },
         {
           text: 'Cancelar',

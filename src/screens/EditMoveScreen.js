@@ -1,68 +1,45 @@
-// NewMoveScreen.js
+// EditMoveScreen.js
 import DateTimePicker from '@react-native-community/datetimepicker';
 import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import {
-  ActivityIndicator,
-  Alert,
-  BackHandler,
-  ScrollView,
-  StatusBar,
-  StyleSheet,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  View
+    ActivityIndicator,
+    Alert,
+    BackHandler,
+    ScrollView,
+    StatusBar,
+    StyleSheet,
+    Text,
+    TextInput,
+    TouchableOpacity,
+    View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { auth } from '../../firebase/auth';
-import { getUserMoves, saveMove } from '../../firebase/moveService';
+import { getMoveById, getUserMoves, updateMove } from '../../firebase/moveService';
 
-const NewMoveScreen = ({ route, navigation }) => {
-  const { origin = 'Home' } = route.params || {};
+const EditMoveScreen = ({ route, navigation }) => {
+  const { moveId, moveOrigin, moveDestination, moveType, origin = 'MoveDetail' } = route.params;
   
-  const [move, setMove] = useState({
-    origin: '',
-    destination: '',
+  const [editedMove, setEditedMove] = useState({
+    origin: moveOrigin || '',
+    destination: moveDestination || '',
     moveDate: '',
-    moveType: 'residential',
+    moveType: moveType || 'residential',
     notes: ''
   });
   
   const [saving, setSaving] = useState(false);
+  const [loading, setLoading] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [existingMoves, setExistingMoves] = useState([]);
-
+  
   const insets = useSafeAreaInsets();
-
-  useEffect(() => {
-    loadExistingMoves();
-  }, []);
-
-  const loadExistingMoves = async () => {
-    try {
-      if (auth.currentUser) {
-        const moves = await getUserMoves();
-        setExistingMoves(moves);
-      }
-    } catch (error) {
-      console.log('Error cargando mudanzas existentes:', error);
-    }
-  };
 
   useEffect(() => {
     const backAction = () => {
       if (navigation.isFocused()) {
-        if (isMoveToday()) {
-          Alert.alert(
-            'Acción requerida',
-            'Debes completar las cajas antes de poder salir, ya que tu mudanza es hoy.',
-            [{ text: 'Entendido' }]
-          );
-          return true;
-        }
-        
         handleGoBack();
         return true;
       }
@@ -75,18 +52,70 @@ const NewMoveScreen = ({ route, navigation }) => {
     );
 
     return () => backHandler.remove();
-  }, [navigation, origin, move.moveDate]);
+  }, [navigation, moveId, origin]);
+
+  useEffect(() => {
+    if (moveId) {
+      loadMoveData();
+    }
+    loadExistingMoves();
+  }, [moveId]);
+
+  const loadExistingMoves = async () => {
+    try {
+      if (auth.currentUser) {
+        const moves = await getUserMoves();
+        // Filtrar la mudanza actual para no compararla consigo misma
+        const otherMoves = moves.filter(m => m.id !== moveId);
+        setExistingMoves(otherMoves);
+      }
+    } catch (error) {
+      console.log('Error cargando mudanzas existentes:', error);
+    }
+  };
 
   const handleGoBack = () => {
-    if (isMoveToday()) {
-      Alert.alert(
-        'Acción requerida',
-        'Debes completar las cajas antes de poder salir, ya que tu mudanza es hoy.',
-        [{ text: 'Entendido' }]
-      );
-      return;
+    switch(origin) {
+      case 'MyTrips':
+        navigation.navigate('MyTrips');
+        break;
+      case 'MoveDetail':
+        navigation.navigate('MoveDetail', { 
+          moveId,
+          moveOrigin: editedMove.origin,
+          moveDestination: editedMove.destination,
+          moveType: editedMove.moveType
+        });
+        break;
+      default:
+        navigation.navigate('MoveDetail', { 
+          moveId,
+          moveOrigin: editedMove.origin,
+          moveDestination: editedMove.destination,
+          moveType: editedMove.moveType
+        });
     }
-    navigation.navigate(origin);
+  };
+
+  const loadMoveData = async () => {
+    try {
+      setLoading(true);
+      const moveData = await getMoveById(moveId);
+      
+      setEditedMove({
+        origin: moveData.origin || '',
+        destination: moveData.destination || '',
+        moveDate: moveData.moveDate || '',
+        moveType: moveData.moveType || 'residential',
+        notes: moveData.notes || ''
+      });
+      
+    } catch (error) {
+      console.error('Error cargando datos de la mudanza:', error);
+      Alert.alert('Error', 'No se pudieron cargar los datos de la mudanza');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const formatDate = (date) => {
@@ -130,7 +159,7 @@ const NewMoveScreen = ({ route, navigation }) => {
     
     if (event.type === 'set' && selectedDate) {
       const formattedDate = formatDate(selectedDate);
-      setMove({...move, moveDate: formattedDate});
+      setEditedMove({...editedMove, moveDate: formattedDate});
     }
   };
 
@@ -139,7 +168,7 @@ const NewMoveScreen = ({ route, navigation }) => {
   };
 
   const getCurrentDateForPicker = () => {
-    return move.moveDate ? parseDateString(move.moveDate) : new Date();
+    return editedMove.moveDate ? parseDateString(editedMove.moveDate) : new Date();
   };
 
   const getMinimumDateForPicker = () => {
@@ -168,12 +197,12 @@ const NewMoveScreen = ({ route, navigation }) => {
   };
 
   const validateAllDateRestrictions = () => {
-    if (!move.moveDate) {
+    if (!editedMove.moveDate) {
       return true;
     }
 
     const today = getToday();
-    const moveDate = parseDateString(move.moveDate);
+    const moveDate = parseDateString(editedMove.moveDate);
 
     if (!moveDate) {
       Alert.alert('Error', 'Formato de fecha inválido');
@@ -185,7 +214,7 @@ const NewMoveScreen = ({ route, navigation }) => {
       return false;
     }
 
-    const overlapCheck = checkDateOverlap(move.moveDate);
+    const overlapCheck = checkDateOverlap(editedMove.moveDate);
     if (overlapCheck.hasOverlap) {
       Alert.alert(
         'Conflicto de Fechas', 
@@ -195,28 +224,6 @@ const NewMoveScreen = ({ route, navigation }) => {
     }
 
     return true;
-  };
-
-  const isMoveToday = () => {
-    if (!move.moveDate) return false;
-    
-    const today = getToday();
-    const moveDate = parseDateString(move.moveDate);
-    
-    if (!moveDate) return false;
-    
-    return moveDate.getTime() === today.getTime();
-  };
-
-  const isMoveInFuture = () => {
-    if (!move.moveDate) return false;
-    
-    const today = getToday();
-    const moveDate = parseDateString(move.moveDate);
-    
-    if (!moveDate) return false;
-    
-    return moveDate.getTime() > today.getTime();
   };
 
   const selectLocation = async (type) => {
@@ -233,9 +240,9 @@ const NewMoveScreen = ({ route, navigation }) => {
               if (geocode[0]) {
                 const address = `${geocode[0].street || ''} ${geocode[0].city || ''}, ${geocode[0].region || ''}`.trim();
                 if (type === 'origin') {
-                  setMove({...move, origin: address || 'Mi ubicación actual'});
+                  setEditedMove({...editedMove, origin: address || 'Mi ubicación actual'});
                 } else {
-                  setMove({...move, destination: address || 'Mi ubicación actual'});
+                  setEditedMove({...editedMove, destination: address || 'Mi ubicación actual'});
                 }
               }
             }
@@ -250,9 +257,9 @@ const NewMoveScreen = ({ route, navigation }) => {
               (text) => {
                 if (text) {
                   if (type === 'origin') {
-                    setMove({...move, origin: text});
+                    setEditedMove({...editedMove, origin: text});
                   } else {
-                    setMove({...move, destination: text});
+                    setEditedMove({...editedMove, destination: text});
                   }
                 }
               }
@@ -288,7 +295,7 @@ const NewMoveScreen = ({ route, navigation }) => {
 
     const options = moveTypes.map(type => ({
       text: type.label,
-      onPress: () => setMove({...move, moveType: type.value})
+      onPress: () => setEditedMove({...editedMove, moveType: type.value})
     }));
 
     options.push({ text: 'Cancelar', style: 'cancel' });
@@ -305,21 +312,31 @@ const NewMoveScreen = ({ route, navigation }) => {
       'storage': '📦 Solo Almacenamiento',
       'other': '🏠 Otro tipo'
     };
-    return types[move.moveType] || 'Seleccionar tipo de mudanza';
+    return types[editedMove.moveType] || 'Seleccionar tipo de mudanza';
   };
 
-  const saveMoveToFirebase = async () => {
-    if (!move.origin) {
+  const handleAddBox = () => {
+    navigation.navigate('NewBox', { 
+      moveId: moveId,
+      origin: editedMove.origin,
+      destination: editedMove.destination,
+      moveType: editedMove.moveType,
+      originScreen: 'EditMove'
+    });
+  };
+
+  const updateMoveInFirebase = async () => {
+    if (!editedMove.origin) {
       Alert.alert('Error', 'Por favor selecciona una dirección de origen');
       return;
     }
 
-    if (!move.destination) {
+    if (!editedMove.destination) {
       Alert.alert('Error', 'Por favor selecciona una dirección de destino');
       return;
     }
 
-    if (!move.moveDate) {
+    if (!editedMove.moveDate) {
       Alert.alert('Error', 'Por favor selecciona una fecha de mudanza');
       return;
     }
@@ -329,7 +346,7 @@ const NewMoveScreen = ({ route, navigation }) => {
     }
 
     if (!auth.currentUser) {
-      Alert.alert('Error', 'Debes iniciar sesión para guardar mudanzas');
+      Alert.alert('Error', 'Debes iniciar sesión para editar mudanzas');
       return;
     }
 
@@ -337,84 +354,50 @@ const NewMoveScreen = ({ route, navigation }) => {
     
     try {
       const moveData = {
-        origin: move.origin,
-        destination: move.destination,
-        moveDate: move.moveDate,
-        moveType: move.moveType,
-        notes: move.notes,
-        status: 'planning',
-        userId: auth.currentUser.uid,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-        isToday: isMoveToday()
+        origin: editedMove.origin,
+        destination: editedMove.destination,
+        moveDate: editedMove.moveDate,
+        moveType: editedMove.moveType,
+        notes: editedMove.notes,
+        updatedAt: new Date()
       };
 
-      const result = await saveMove(moveData);
+      await updateMove(moveId, moveData);
       
-      const todayMove = isMoveToday();
-      
-      if (todayMove) {
-        Alert.alert(
-          '✅ Mudanza Guardada', 
-          'Tu mudanza es hoy. Ahora debes agregar las cajas inmediatamente para poder continuar.',
-          [
-            {
-              text: 'Agregar Cajas',
-              onPress: () => {
-                navigation.replace('NewBox', { 
-                  moveId: result.id,
-                  origin: move.origin,
-                  destination: move.destination,
-                  moveType: move.moveType,
-                  originScreen: origin,
-                  forceBoxes: true,
-                  moveIsToday: true
+      Alert.alert(
+        '✅ Éxito', 
+        'Mudanza actualizada correctamente',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              if (origin === 'MyTrips') {
+                navigation.navigate('MyTrips');
+              } else {
+                navigation.navigate('MoveDetail', { 
+                  moveId,
+                  moveOrigin: editedMove.origin,
+                  moveDestination: editedMove.destination,
+                  moveType: editedMove.moveType
                 });
               }
             }
-          ],
-          { cancelable: false }
-        );
-      } else {
-        Alert.alert(
-          '✅ Mudanza Guardada', 
-          '¿Deseas agregar cajas para esta mudanza ahora?',
-          [
-            {
-              text: 'Más Tarde',
-              style: 'cancel',
-              onPress: () => {
-                navigation.navigate(origin);
-              }
-            },
-            {
-              text: 'Agregar Cajas',
-              onPress: () => {
-                navigation.navigate('NewBox', { 
-                  moveId: result.id,
-                  origin: move.origin,
-                  destination: move.destination,
-                  moveType: move.moveType,
-                  originScreen: origin
-                });
-              }
-            }
-          ]
-        );
-      }
+          }
+        ]
+      );
       
     } catch (error) {
-      console.error('❌ Error guardando mudanza:', error);
+      console.error('❌ Error actualizando mudanza:', error);
       
-      let errorMessage = 'No se pudo guardar la mudanza. Error desconocido.';
+      let errorMessage = 'No se pudo actualizar la mudanza.';
       
       if (error.message) {
         if (error.message.includes('permission')) {
           errorMessage = 'Error de permisos. Verifica las reglas de Firestore.';
         } else if (error.message.includes('network')) {
           errorMessage = 'Error de conexión. Verifica tu internet.';
-        } else {
-          errorMessage = `Error: ${error.message}`;
+        } else if (error.message.includes('not-found')) {
+          errorMessage = 'La mudanza no existe o fue eliminada.';
         }
       }
       
@@ -424,6 +407,18 @@ const NewMoveScreen = ({ route, navigation }) => {
     }
   };
 
+  if (loading) {
+    return (
+      <View style={[styles.container, { paddingTop: insets.top }]}>
+        <StatusBar backgroundColor="#121212" barStyle="light-content" />
+        <View style={styles.centerContainer}>
+          <ActivityIndicator size="large" color="#BB86FC" />
+          <Text style={styles.loadingText}>Cargando mudanza...</Text>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
@@ -432,7 +427,7 @@ const NewMoveScreen = ({ route, navigation }) => {
         <TouchableOpacity onPress={handleGoBack}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nueva Mudanza</Text>
+        <Text style={styles.headerTitle}>Editar Mudanza</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -444,8 +439,8 @@ const NewMoveScreen = ({ route, navigation }) => {
             style={styles.inputWithIcon} 
             onPress={() => selectLocation('origin')}
           >
-            <Text style={move.origin ? styles.inputText : styles.placeholderText}>
-              {move.origin || 'Dirección de origen *'}
+            <Text style={editedMove.origin ? styles.inputText : styles.placeholderText}>
+              {editedMove.origin || 'Dirección de origen *'}
             </Text>
             <Ionicons name="home-outline" size={20} color="#BB86FC" />
           </TouchableOpacity>
@@ -454,8 +449,8 @@ const NewMoveScreen = ({ route, navigation }) => {
             style={styles.inputWithIcon} 
             onPress={() => selectLocation('destination')}
           >
-            <Text style={move.destination ? styles.inputText : styles.placeholderText}>
-              {move.destination || 'Dirección de destino *'}
+            <Text style={editedMove.destination ? styles.inputText : styles.placeholderText}>
+              {editedMove.destination || 'Dirección de destino *'}
             </Text>
             <Ionicons name="business-outline" size={20} color="#BB86FC" />
           </TouchableOpacity>
@@ -474,65 +469,43 @@ const NewMoveScreen = ({ route, navigation }) => {
             style={styles.inputWithIcon} 
             onPress={openDateCalendar}
           >
-            <Text style={move.moveDate ? styles.inputText : styles.placeholderText}>
-              {move.moveDate || 'Fecha de mudanza *'}
+            <Text style={editedMove.moveDate ? styles.inputText : styles.placeholderText}>
+              {editedMove.moveDate || 'Fecha de mudanza *'}
             </Text>
             <Ionicons name="calendar-outline" size={20} color="#BB86FC" />
           </TouchableOpacity>
-          
-          {move.moveDate && (
-            <View style={[
-              styles.statusSection, 
-              isMoveToday() ? styles.warningSection : styles.infoSection
-            ]}>
-              <Ionicons 
-                name={isMoveToday() ? "warning" : "information-circle-outline"} 
-                size={16} 
-                color={isMoveToday() ? "#FFA500" : "#BB86FC"} 
-              />
-              <Text style={[
-                styles.statusText,
-                isMoveToday() ? styles.warningText : styles.infoText
-              ]}>
-                {isMoveToday() 
-                  ? ' Esta mudanza es HOY. Deberás agregar las cajas inmediatamente.'
-                  : isMoveInFuture()
-                  ? '📅 Esta mudanza está programada para el futuro. Podrás editarla hasta el día de la mudanza.'
-                  : 'Selecciona una fecha de mudanza'
-                }
-              </Text>
-            </View>
-          )}
           
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Notas adicionales (piso, ascensor, objetos especiales, etc.)"
             placeholderTextColor="#888"
-            value={move.notes}
-            onChangeText={(text) => setMove({...move, notes: text})}
+            value={editedMove.notes}
+            onChangeText={(text) => setEditedMove({...editedMove, notes: text})}
             multiline
             numberOfLines={3}
           />
         </View>
 
+        
+
         <View style={styles.infoSection}>
           <Ionicons name="information-circle-outline" size={20} color="#BB86FC" />
           <Text style={styles.infoText}>
-            Después de guardar la mudanza, podrás agregar cajas con sugerencias organizadas por habitación o tipo de objeto.
-            {isMoveToday() && '\n\n⚠️ Si la mudanza es hoy, deberás agregar las cajas inmediatamente.'}
+            Las cajas se gestionan en su propia sección. Puedes agregar, editar o eliminar cajas desde aquí.
+            {existingMoves.length > 0 && '\n\n⚠️ Las fechas no deben coincidir con otras mudanzas existentes.'}
           </Text>
         </View>
 
         <TouchableOpacity 
           style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
-          onPress={saveMoveToFirebase}
+          onPress={updateMoveInFirebase}
           disabled={saving}
         >
           {saving ? (
             <ActivityIndicator size="small" color="#FFFFFF" />
           ) : (
             <Text style={styles.saveButtonText}>
-              {isMoveToday() ? 'Guardar Mudanza y Agregar Cajas' : 'Guardar Mudanza'}
+              {saving ? 'Actualizando...' : 'Actualizar Mudanza'}
             </Text>
           )}
         </TouchableOpacity>
@@ -545,6 +518,7 @@ const NewMoveScreen = ({ route, navigation }) => {
           display="default"
           onChange={handleDateChange}
           minimumDate={getMinimumDateForPicker()}
+          style={styles.datePicker}
         />
       )}
     </View>
@@ -555,6 +529,17 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#121212',
+  },
+  centerContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 40,
+  },
+  loadingText: {
+    color: '#FFFFFF',
+    marginTop: 10,
+    fontSize: 16,
   },
   header: {
     flexDirection: 'row',
@@ -577,6 +562,9 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   formSection: {
+    marginBottom: 30,
+  },
+  boxesSection: {
     marginBottom: 30,
   },
   sectionTitle: {
@@ -618,33 +606,37 @@ const styles = StyleSheet.create({
     height: 80,
     textAlignVertical: 'top',
   },
-  statusSection: {
+  boxesButton: {
+    backgroundColor: '#FF6B6B',
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    padding: 12,
-    borderRadius: 8,
-    marginBottom: 15,
-    gap: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 15,
+    borderRadius: 10,
+    gap: 10,
   },
-  warningSection: {
-    backgroundColor: 'rgba(255, 165, 0, 0.1)',
+  boxesButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
   infoSection: {
-    backgroundColor: 'rgba(187, 134, 252, 0.1)',
-  },
-  statusText: {
-    flex: 1,
-    fontSize: 12,
-    lineHeight: 16,
-  },
-  warningText: {
-    color: '#FFA500',
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 107, 107, 0.1)',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 20,
+    gap: 10,
   },
   infoText: {
-    color: '#BB86FC',
+    flex: 1,
+    color: '#FF6B6B',
+    fontSize: 14,
+    lineHeight: 20,
   },
   saveButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: '#FF6B6B',
     padding: 18,
     borderRadius: 10,
     alignItems: 'center',
@@ -660,6 +652,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     textAlign: 'center',
   },
+  datePicker: {
+    backgroundColor: '#1E1E1E',
+  },
 });
 
-export default NewMoveScreen;
+export default EditMoveScreen;

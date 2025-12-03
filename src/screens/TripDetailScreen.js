@@ -238,91 +238,149 @@ const TripDetailScreen = ({ route, navigation }) => {
   };
 
   // ✅ FUNCIÓN MEJORADA: Eliminar viaje con verificación de estado
-  const handleDeleteTrip = async () => {
-    const tripStatus = getTripStatusForTrip();
-    
-    if (!tripStatus.canDelete) {
-      Alert.alert(
-        `Viaje ${tripStatus.status}`,
-        `No puedes eliminar viajes que están ${tripStatus.status.toLowerCase()}.`,
-        [{ text: 'Entendido' }]
-      );
-      closeActionsModal();
-      return;
-    }
+ const handleDeleteTrip = () => {
+  const tripStatus = getTripStatusForTrip();
+  
+  if (!tripStatus.canDelete) {
+    Alert.alert(
+      `Viaje ${tripStatus.status}`,
+      `No puedes eliminar viajes que están ${tripStatus.status.toLowerCase()}.`,
+      [{ text: 'Entendido' }]
+    );
+    closeActionsModal();
+    return;
+  }
 
+  
+  // ✅ Cerrar el modal primero
+  closeActionsModal();
+
+      // ✅ Esperar un momento para que el modal se cierre completamente
+  setTimeout(() => {
+    // ✅ Ahora mostrar la alerta de confirmación
     Alert.alert(
       'Eliminar Viaje',
       `¿Estás seguro de eliminar "${trip.purpose || trip.destination || 'este viaje'}"?`,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Cancelar', 
+          style: 'cancel',
+          onPress: () => {
+            console.log('✅ Eliminación de viaje cancelada por el usuario');
+            // NO hacer nada - el usuario canceló
+          }
+        },
         { 
           text: 'Eliminar', 
           onPress: async () => {
-            try {
-              await deleteTrip(trip.id);
-              closeActionsModal();
-              navigation.navigate('MyTrips');
-            } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar el viaje');
-            }
+            console.log('✅ Usuario confirmó eliminación de viaje');
+            await performDeleteTrip();
           },
           style: 'destructive'
         }
-      ]
+      ],
+      // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
+      { cancelable: false }
     );
-  };
+  }, 100); // Esperar 300ms para que el modal se cierre
+};
+
+const performDeleteTrip = async () => {
+  try {
+    console.log('🟡 Eliminando viaje:', trip.id);
+    await deleteTrip(trip.id);
+    
+    // ✅ Navegar después de eliminar
+    navigation.navigate('MyTrips');
+    
+  } catch (error) {
+    console.error('❌ Error eliminando viaje:', error);
+    Alert.alert('Error', 'No se pudo eliminar el viaje');
+  }
+};
 
   // ✅ FUNCIÓN MEJORADA: Eliminar maleta con verificación de estado
-  const handleDeleteLuggage = async (luggageItem) => {
-    const tripStatus = getTripStatusForTrip();
-    
-    if (!tripStatus.canDeleteLuggage) {
-      Alert.alert(
-        `Viaje ${tripStatus.status}`,
-        `No puedes eliminar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
-        [{ text: 'Entendido' }]
-      );
-      return;
-    }
+  const handleDeleteLuggage = (luggageItem) => {
+  const tripStatus = getTripStatusForTrip();
+  
+  if (!tripStatus.canDeleteLuggage) {
+    Alert.alert(
+      `Viaje ${tripStatus.status}`,
+      `No puedes eliminar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
+      [{ text: 'Entendido' }]
+    );
+    return;
+  }
 
+   // ✅ Cerrar el modal primero
+  closeLuggageModal();
+
+    // ✅ Esperar un momento para que el modal se cierre completamente
+  setTimeout(() => {
+    // ✅ Ahora mostrar la alerta de confirmación
     Alert.alert(
       'Eliminar Maleta',
       `¿Estás seguro de eliminar esta ${luggageItem.categoria || 'maleta'}?`,
       [
-        { text: 'Cancelar', style: 'cancel' },
+        { 
+          text: 'Cancelar', 
+          style: 'cancel',
+          onPress: () => {
+            console.log('✅ Eliminación de maleta cancelada por el usuario');
+            // NO hacer nada - el usuario canceló
+          }
+        },
         { 
           text: 'Eliminar', 
           onPress: async () => {
-            try {
-              await deleteLuggage(trip.id, luggageItem.id);
-              setLuggage(luggage.filter(item => item.id !== luggageItem.id));
-              closeLuggageModal();
-              Alert.alert('✅', 'Maleta eliminada correctamente');
-            } catch (error) {
-              Alert.alert('Error', 'No se pudo eliminar la maleta');
-            }
+            console.log('✅ Usuario confirmó eliminación de maleta');
+            await performDeleteLuggage(luggageItem);
           },
           style: 'destructive'
         }
-      ]
+      ],
+      // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
+      { cancelable: false }
     );
-  };
+  }, 100); // Esperar 300ms para que el modal se cierre
+};
+
+// ✅ FUNCIÓN SEPARADA: Ejecutar la eliminación de maleta
+const performDeleteLuggage = async (luggageItem) => {
+  try {
+    console.log('🟡 Eliminando maleta:', luggageItem.id, 'del viaje:', trip.id);
+    await deleteLuggage(trip.id, luggageItem.id);
+    
+    // ✅ Actualizar la lista después de eliminar
+    setLuggage(prevLuggage => prevLuggage.filter(item => item.id !== luggageItem.id));
+    
+    // ✅ Mostrar confirmación
+    Alert.alert('✅', 'Maleta eliminada correctamente');
+    
+  } catch (error) {
+    console.error('❌ Error eliminando maleta:', error);
+    Alert.alert('Error', 'No se pudo eliminar la maleta');
+  }
+};
 
   // ✅ FUNCIÓN MEJORADA: Editar maleta con verificación de estado
   const handleEditLuggage = (luggageItem) => {
-    const tripStatus = getTripStatusForTrip();
-    
-    if (!tripStatus.canEditLuggage) {
-      Alert.alert(
-        `Viaje ${tripStatus.status}`,
-        `No puedes editar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
-        [{ text: 'Entendido' }]
-      );
-      return;
-    }
+  const tripStatus = getTripStatusForTrip();
+  
+  if (!tripStatus.canEditLuggage) {
+    Alert.alert(
+      `Viaje ${tripStatus.status}`,
+      `No puedes editar maletas de viajes que están ${tripStatus.status.toLowerCase()}.`,
+      [{ text: 'Entendido' }]
+    );
+    return;
+  }
 
-    closeLuggageModal();
+  // ✅ Cerrar el modal primero
+  closeLuggageModal();
+
+// ✅ Navegar después de cerrar el modal
+  setTimeout(() => {
     navigation.navigate('NewMaleta', { 
       tripId: trip.id, 
       destination: trip.destination, 
@@ -332,7 +390,8 @@ const TripDetailScreen = ({ route, navigation }) => {
       luggageToEdit: luggageItem,
       mode: 'edit'
     });
-  };
+  }, 100);
+};
 
   // ✅ CORREGIDO: Navegación sin replace
   const goBack = () => {
@@ -628,27 +687,31 @@ const TripDetailScreen = ({ route, navigation }) => {
                     </Text>
                   </TouchableOpacity>
                   
-                  <TouchableOpacity 
-                    style={[
-                      styles.modalActionButton,
-                      styles.deleteButton,
-                      !tripStatus.canDeleteLuggage && styles.disabledButton
-                    ]}
-                    onPress={() => handleDeleteLuggage(selectedLuggage)}
-                    disabled={!tripStatus.canDeleteLuggage}
-                  >
-                    <Ionicons 
-                      name="trash" 
-                      size={20} 
-                      color={!tripStatus.canDeleteLuggage ? "#666" : "#FFFFFF"} 
-                    />
-                    <Text style={[
-                      styles.modalActionText,
-                      !tripStatus.canDeleteLuggage && styles.disabledText
-                    ]}>
-                      Eliminar
-                    </Text>
-                  </TouchableOpacity>
+                  
+<TouchableOpacity 
+  style={[
+    styles.modalActionButton,
+    styles.deleteButton,
+    !tripStatus.canDeleteLuggage && styles.disabledButton
+  ]}
+  onPress={() => {
+    console.log('🗑️ Solicitando eliminación de maleta:', selectedLuggage?.id);
+    handleDeleteLuggage(selectedLuggage);
+  }}
+  disabled={!tripStatus.canDeleteLuggage}
+>
+  <Ionicons 
+    name="trash" 
+    size={20} 
+    color={!tripStatus.canDeleteLuggage ? "#666" : "#FFFFFF"} 
+  />
+  <Text style={[
+    styles.modalActionText,
+    !tripStatus.canDeleteLuggage && styles.disabledText
+  ]}>
+    Eliminar
+  </Text>
+</TouchableOpacity>
                 </View>
               </View>
             </TouchableWithoutFeedback>
@@ -678,34 +741,37 @@ const TripDetailScreen = ({ route, navigation }) => {
                 </View>
 
                 <View style={styles.actionsList}>
-                  <TouchableOpacity 
-                    style={[
-                      styles.actionItem,
-                      !tripStatus.canDelete && styles.disabledAction
-                    ]}
-                    onPress={handleDeleteTrip}
-                    disabled={!tripStatus.canDelete}
-                  >
-                    <Ionicons 
-                      name="trash" 
-                      size={24} 
-                      color={!tripStatus.canDelete ? "#666" : "#F44336"} 
-                    />
-                    <View style={styles.actionTextContainer}>
-                      <Text style={[
-                        styles.actionTitle,
-                        !tripStatus.canDelete && styles.disabledText
-                      ]}>
-                        Eliminar Viaje
-                      </Text>
-                      <Text style={styles.actionSubtitle}>
-                        {!tripStatus.canDelete 
-                          ? `No disponible - Viaje ${tripStatus.status}`
-                          : 'Eliminar este viaje permanentemente'
-                        }
-                      </Text>
-                    </View>
-                  </TouchableOpacity>
+                 <TouchableOpacity 
+  style={[
+    styles.actionItem,
+    !tripStatus.canDelete && styles.disabledAction
+  ]}
+  onPress={() => {
+    console.log('🗑️ Solicitando eliminación de viaje:', trip.id);
+    handleDeleteTrip();
+  }}
+  disabled={!tripStatus.canDelete}
+>
+  <Ionicons 
+    name="trash" 
+    size={24} 
+    color={!tripStatus.canDelete ? "#666" : "#F44336"} 
+  />
+  <View style={styles.actionTextContainer}>
+    <Text style={[
+      styles.actionTitle,
+      !tripStatus.canDelete && styles.disabledText
+    ]}>
+      Eliminar Viaje
+    </Text>
+    <Text style={styles.actionSubtitle}>
+      {!tripStatus.canDelete 
+        ? `No disponible - Viaje ${tripStatus.status}`
+        : 'Eliminar este viaje permanentemente'
+      }
+    </Text>
+  </View>
+</TouchableOpacity>
                 </View>
 
                 <View style={styles.modalFooter}>
