@@ -52,7 +52,7 @@ const SettingScreen = ({ navigation }) => {
         {
             title: 'Ayuda y Soporte',
             icon: '❓',
-            onPress: () => navigation.navigate('help')
+            onPress: () => navigation.navigate('Help')
         },
         {
             title: 'Acerca de',

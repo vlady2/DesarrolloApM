@@ -1,6 +1,5 @@
 // NewMoveScreen.js
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -219,62 +218,20 @@ const NewMoveScreen = ({ route, navigation }) => {
     return moveDate.getTime() > today.getTime();
   };
 
-  const selectLocation = async (type) => {
-    try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      
-      const options = [
-        {
-          text: 'Usar mi ubicación actual',
-          onPress: async () => {
-            if (status === 'granted') {
-              let location = await Location.getCurrentPositionAsync({});
-              let geocode = await Location.reverseGeocodeAsync(location.coords);
-              if (geocode[0]) {
-                const address = `${geocode[0].street || ''} ${geocode[0].city || ''}, ${geocode[0].region || ''}`.trim();
-                if (type === 'origin') {
-                  setMove({...move, origin: address || 'Mi ubicación actual'});
-                } else {
-                  setMove({...move, destination: address || 'Mi ubicación actual'});
-                }
-              }
+  const selectLocation = (type) => {
+    navigation.navigate('MapPickerMove', {
+        addressType: type,
+        currentAddress: type === 'origin' ? move.origin : move.destination,
+        onSelectAddress: (address, addressType) => {
+            if (addressType === 'origin') {
+                setMove({...move, origin: address});
+            } else {
+                setMove({...move, destination: address});
             }
-          }
-        },
-        {
-          text: 'Buscar en el mapa',
-          onPress: () => {
-            Alert.prompt(
-              type === 'origin' ? 'Dirección de Origen' : 'Dirección de Destino',
-              'Escribe la dirección:',
-              (text) => {
-                if (text) {
-                  if (type === 'origin') {
-                    setMove({...move, origin: text});
-                  } else {
-                    setMove({...move, destination: text});
-                  }
-                }
-              }
-            );
-          }
-        },
-        {
-          text: 'Cancelar',
-          style: 'cancel'
         }
-      ];
+    });
+};
 
-      Alert.alert(
-        type === 'origin' ? 'Seleccionar Origen' : 'Seleccionar Destino',
-        '¿Cómo quieres seleccionar la dirección?',
-        options
-      );
-    } catch (error) {
-      console.log('Error:', error);
-      Alert.alert('Error', 'No se pudo obtener la ubicación');
-    }
-  };
 
   const selectMoveType = () => {
     const moveTypes = [
@@ -441,24 +398,24 @@ const NewMoveScreen = ({ route, navigation }) => {
           <Text style={styles.sectionTitle}>Información de la Mudanza</Text>
           
           <TouchableOpacity 
-            style={styles.inputWithIcon} 
-            onPress={() => selectLocation('origin')}
-          >
-            <Text style={move.origin ? styles.inputText : styles.placeholderText}>
-              {move.origin || 'Dirección de origen *'}
-            </Text>
-            <Ionicons name="home-outline" size={20} color="#BB86FC" />
-          </TouchableOpacity>
+    style={styles.inputWithIcon} 
+    onPress={() => selectLocation('origin')}
+>
+    <Text style={move.origin ? styles.inputText : styles.placeholderText}>
+        {move.origin || 'Dirección de origen *'}
+    </Text>
+    <Ionicons name="map-outline" size={20} color="#BB86FC" />
+</TouchableOpacity>
           
           <TouchableOpacity 
-            style={styles.inputWithIcon} 
-            onPress={() => selectLocation('destination')}
-          >
-            <Text style={move.destination ? styles.inputText : styles.placeholderText}>
-              {move.destination || 'Dirección de destino *'}
-            </Text>
-            <Ionicons name="business-outline" size={20} color="#BB86FC" />
-          </TouchableOpacity>
+    style={styles.inputWithIcon} 
+    onPress={() => selectLocation('destination')}
+>
+    <Text style={move.destination ? styles.inputText : styles.placeholderText}>
+        {move.destination || 'Dirección de destino *'}
+    </Text>
+    <Ionicons name="map-outline" size={20} color="#BB86FC" />
+</TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.inputWithIcon} 

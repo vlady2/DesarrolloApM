@@ -1,5 +1,4 @@
 import DateTimePicker from '@react-native-community/datetimepicker';
-import * as Location from 'expo-location';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -65,7 +64,6 @@ const EditTripScreen = ({ route, navigation }) => {
     try {
       if (auth.currentUser) {
         const trips = await getUserTrips();
-        // Filtrar el viaje actual para no compararlo consigo mismo
         const otherTrips = trips.filter(t => t.id !== trip.id);
         setExistingTrips(otherTrips);
       }
@@ -108,7 +106,7 @@ const EditTripScreen = ({ route, navigation }) => {
     }
   };
 
-  // ✅ FUNCIONES DE MANEJO DE FECHAS CONSISTENTES (igual que en NewTripScreen)
+  // ✅ FUNCIONES DE MANEJO DE FECHAS
   const formatDate = (date) => {
     const utcDate = new Date(Date.UTC(
       date.getFullYear(),
@@ -154,7 +152,6 @@ const EditTripScreen = ({ route, navigation }) => {
       if (datePickerMode === 'start') {
         setEditedTrip({...editedTrip, startDate: formattedDate});
         
-        // Si la fecha de fin es anterior a la nueva fecha de inicio, limpiarla
         if (editedTrip.endDate) {
           const endDate = parseDateString(editedTrip.endDate);
           const startDate = parseDateString(formattedDate);
@@ -252,19 +249,16 @@ const EditTripScreen = ({ route, navigation }) => {
       return false;
     }
 
-    // Validar que la fecha de inicio no sea pasada
     if (startDate < today) {
       Alert.alert('Error', 'La fecha de inicio no puede ser una fecha pasada.');
       return false;
     }
 
-    // Validar fecha de fin no sea anterior a inicio
     if (endDate < startDate) {
       Alert.alert('Error', 'La fecha de fin no puede ser anterior a la fecha de inicio.');
       return false;
     }
 
-    // Validar solapamiento con viajes existentes
     const overlapCheck = checkDateOverlap(editedTrip.startDate, editedTrip.endDate);
     if (overlapCheck.hasOverlap) {
       let message = '';
@@ -291,61 +285,23 @@ const EditTripScreen = ({ route, navigation }) => {
     return true;
   };
 
-  const openMap = async () => {
-    try {
-      let { status } = await Location.requestForegroundPermissionsAsync();
-      
-      const options = [
-        {
-          text: 'Usar mi ubicación actual',
-          onPress: async () => {
-            if (status === 'granted') {
-              let location = await Location.getCurrentPositionAsync({});
-              let geocode = await Location.reverseGeocodeAsync(location.coords);
-              if (geocode[0]) {
-                setEditedTrip({
-                  ...editedTrip, 
-                  destination: `${geocode[0].city || geocode[0].region}, ${geocode[0].country}`
-                });
-              }
-            }
-          }
-        },
-        {
-          text: 'Ciudad de México',
-          onPress: () => setEditedTrip({...editedTrip, destination: 'Ciudad de México, México'})
-        },
-        {
-          text: 'Madrid',
-          onPress: () => setEditedTrip({...editedTrip, destination: 'Madrid, España'})
-        },
-        {
-          text: 'Nueva York',
-          onPress: () => setEditedTrip({...editedTrip, destination: 'Nueva York, USA'})
-        },
-        {
-          text: 'Escribir manualmente',
-          onPress: () => {
-            Alert.prompt(
-              'Destino',
-              'Escribe tu destino:',
-              (text) => {
-                if (text) setEditedTrip({...editedTrip, destination: text});
-              }
-            );
-          }
-        },
-        {
-          text: 'Cancelar',
-          style: 'cancel'
+  // ✅ ABRIR MAPA EN PANTALLA COMPLETA - CON CALLBACK
+  const openMap = () => {
+    navigation.navigate('MapPicker', {
+      onSelectLocation: (locationData) => {
+        // ✅ ESTO ES CLAVE: Recibe la ubicación seleccionada y actualiza el estado
+        if (locationData && locationData.country && locationData.city) {
+          const newDestination = `${locationData.country}, ${locationData.city}`;
+          console.log('📍 Destino seleccionado desde mapa:', newDestination);
+          setEditedTrip(prev => ({
+            ...prev,
+            destination: newDestination
+          }));
         }
-      ];
-
-      Alert.alert('Seleccionar Destino', 'Elige tu destino:', options);
-    } catch (error) {
-      console.log('Error:', error);
-      Alert.alert('Error', 'No se pudo obtener la ubicación');
-    }
+      },
+      // Opcional: pasar el destino actual para centrar el mapa
+      currentDestination: editedTrip.destination
+    });
   };
 
   const validateDates = () => {
@@ -366,16 +322,6 @@ const EditTripScreen = ({ route, navigation }) => {
     validateDates();
   }, [editedTrip.startDate, editedTrip.endDate]);
 
-  // ✅ FUNCIÓN PARA AGREGAR MALETAS
-  const handleAddLuggage = () => {
-    navigation.navigate('NewMaleta', { 
-      tripId: trip.id,
-      destination: editedTrip.destination,
-      purpose: editedTrip.purpose,
-      origin: 'EditTrip'
-    });
-  };
-
   const updateTripInFirebase = async () => {
     if (!editedTrip.destination) {
       Alert.alert('Error', 'Por favor selecciona un destino');
@@ -392,7 +338,6 @@ const EditTripScreen = ({ route, navigation }) => {
       return;
     }
 
-    // ✅ AGREGAR VALIDACIÓN DE SOLAPAMIENTO
     if (!validateAllDateRestrictions()) {
       return;
     }
@@ -483,6 +428,7 @@ const EditTripScreen = ({ route, navigation }) => {
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Información del Viaje</Text>
           
+          {/* ✅ BOTÓN PARA ABRIR MAPA EN PANTALLA COMPLETA */}
           <TouchableOpacity style={styles.inputWithIcon} onPress={openMap}>
             <Text style={editedTrip.destination ? styles.inputText : styles.placeholderText}>
               {editedTrip.destination || 'Seleccionar destino *'}
@@ -515,8 +461,8 @@ const EditTripScreen = ({ route, navigation }) => {
           />
         </View>
 
-        {/* ✅ BOTÓN PARA AGREGAR MALETAS */}
-         <View style={styles.infoSection}>
+        {/* ✅ INFO SECTION */}
+        <View style={styles.infoSection}>
           <Ionicons name="information-circle-outline" size={20} color="#BB86FC" />
           <Text style={styles.infoText}>
             Los artículos se gestionan en la sección de maletas.
@@ -524,6 +470,7 @@ const EditTripScreen = ({ route, navigation }) => {
           </Text>
         </View>
 
+        {/* ✅ BOTÓN PARA ACTUALIZAR */}
         <TouchableOpacity 
           style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
           onPress={updateTripInFirebase}
@@ -592,9 +539,6 @@ const styles = StyleSheet.create({
   formSection: {
     marginBottom: 30,
   },
-  luggageSection: {
-    marginBottom: 30,
-  },
   sectionTitle: {
     fontSize: 18,
     fontWeight: 'bold',
@@ -633,27 +577,6 @@ const styles = StyleSheet.create({
   textArea: {
     height: 80,
     textAlignVertical: 'top',
-  },
-  // ✅ ESTILOS PARA BOTÓN DE MALETAS
-  luggageButton: {
-    backgroundColor: '#BB86FC',
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 15,
-    borderRadius: 10,
-    marginBottom: 10,
-    gap: 10,
-  },
-  luggageButtonText: {
-    color: '#121212',
-    fontSize: 16,
-    fontWeight: 'bold',
-  },
-  luggageInfo: {
-    color: '#888',
-    fontSize: 14,
-    textAlign: 'center',
   },
   infoSection: {
     flexDirection: 'row',

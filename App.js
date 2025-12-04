@@ -1,21 +1,28 @@
 import { NavigationContainer } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { onAuthStateChanged } from 'firebase/auth';
+import { useEffect, useState } from 'react';
 import 'react-native-gesture-handler';
+
+// Firebase
+import { auth } from './firebase/auth';
+
+// Loading
+import LoadingScreen from './src/components/LoadingScreen';
+
+// Auth Screens
 import LoginScreen from './src/screens/auth_users/LogInScreen';
 import RegisterScreen from './src/screens/auth_users/RegisterScreen';
-
-
-// Usa tu Drawer principal
-
 
 // Main Screens
 import AboutScreen from './src/screens/AboutScreen';
 import ArticulosProhibidosScreen from './src/screens/ArticulosProhibidosScreen';
 import EditMoveScreen from './src/screens/EditMoveScreen';
 import EditTripScreen from './src/screens/EditTripScreen';
-import helpSoportScreen from './src/screens/helpSoportScreen';
+import HelpSoportScreen from './src/screens/HelpSoportScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import MaletasScreen from './src/screens/Maletascreen';
+import MapPickerMoveScreen from './src/screens/MapPickerMoveScreen';
 import MapPickerScreen from './src/screens/MapPickerScreen';
 import MoveDetailScreen from './src/screens/MoveDetailScreen';
 import MyTripsScreen from './src/screens/MyTripsScreen';
@@ -26,57 +33,80 @@ import NewTripScreen from './src/screens/NewTripScreen';
 import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
 
-
 const Stack = createNativeStackNavigator();
 
 export default function App() {
+  const [user, setUser] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    // Suscribirse a cambios en el estado de autenticación
+    const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
+      console.log('🔄 Estado de autenticación:', 
+        currentUser ? `Usuario: ${currentUser.email}` : 'No autenticado'
+      );
+      setUser(currentUser);
+      setLoading(false);
+    });
+
+    // Limpiar suscripción al desmontar
+    return unsubscribe;
+  }, []);
+
+  if (loading) {
+    return <LoadingScreen />;
+  }
+
   return (
     <NavigationContainer>
-      <Stack.Navigator initialRouteName="Login">
-        
-        {/* Auth */}
+      <Stack.Navigator>
+        {/* Define TODAS las pantallas */}
         <Stack.Screen 
           name="Login" 
           component={LoginScreen}
-          options={{ headerShown: false }}
+          options={{ 
+            headerShown: false,
+            // Si el usuario está autenticado, ocultar Login del stack
+            ...(user && { gestureEnabled: false, animationEnabled: false })
+          }}
         />
         <Stack.Screen 
           name="Register" 
           component={RegisterScreen}
           options={{ headerShown: false }}
         />
-
-        {/* Navegación principal */}
         <Stack.Screen 
           name="Home" 
           component={HomeScreen}
-          options={{ headerShown: false }}
+          options={{ 
+            headerShown: false,
+            // Si NO hay usuario, ocultar Home del stack
+            ...(!user && { gestureEnabled: false, animationEnabled: false })
+          }}
         />
-
+        
+        {/* Todas las demás pantallas */}
         <Stack.Screen 
           name="NewMaleta" 
           component={NewMaletaScreen}
           options={{ headerShown: false }}
         />
-
         <Stack.Screen 
           name="EditTrip" 
           component={EditTripScreen}
           options={{ headerShown: false }}
         />
-
         <Stack.Screen 
           name="TripDetail" 
           component={TripDetailScreen}
           options={{ headerShown: false }}
         />
-
-         <Stack.Screen 
+        <Stack.Screen 
           name="MyTrips" 
           component={MyTripsScreen}
           options={{ headerShown: false }}
         />
-         <Stack.Screen 
+        <Stack.Screen 
           name="NewTrip" 
           component={NewTripScreen}
           options={{ headerShown: false }}
@@ -86,12 +116,11 @@ export default function App() {
           component={NewMoveScreen}
           options={{ headerShown: false }}
         />
-         <Stack.Screen 
+        <Stack.Screen 
           name="Setting" 
           component={SettingScreen}
           options={{ headerShown: false }}
         />
-
         <Stack.Screen 
           name="ArticulosProhibidos" 
           component={ArticulosProhibidosScreen}
@@ -118,23 +147,26 @@ export default function App() {
           options={{ headerShown: false }}
         />
         <Stack.Screen
-        name="About"
-        component={AboutScreen}
-        options={{headerShown: false}}
+          name="About"
+          component={AboutScreen}
+          options={{headerShown: false}}
         />
         <Stack.Screen
-        name="help"
-        component={helpSoportScreen}
-        options={{headerShown: false}}/>
-       
+          name="Help"
+          component={HelpSoportScreen}
+          options={{headerShown: false}}
+        />
         <Stack.Screen
           name="MapPicker"
           component={MapPickerScreen}
           options={{ headerShown: false }}
         />
-
+        <Stack.Screen
+          name="MapPickerMove"
+          component={MapPickerMoveScreen}
+          options={{ headerShown: false }}
+        />
       </Stack.Navigator>
-      
     </NavigationContainer>
   );
 }

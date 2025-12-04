@@ -14,47 +14,40 @@ import { auth } from '../../firebase/auth';
 
 const HomeScreen = ({ navigation }) => {
   const [userName, setUserName] = useState('Usuario');
+  const [userEmail, setUserEmail] = useState('');
+
+  // ✅ Obtener información del usuario al cargar
+  useEffect(() => {
+    const user = auth.currentUser;
+    if (user) {
+      // Intentar usar displayName, si no existe usar email
+      const name = user.displayName || user.email?.split('@')[0] || 'Usuario';
+      setUserName(name);
+      setUserEmail(user.email || '');
+      
+      console.log('🏠 HomeScreen cargado para:', user.email);
+    }
+  }, []);
 
   // ✅ CORREGIDO: Manejar el botón físico de back en HomeScreen
-  useEffect(() => {
-    const backAction = () => {
-      // En HomeScreen, el back físico debe salir de la app
-      if (navigation.isFocused()) {
-        Alert.alert(
-          'Salir',
-          '¿Estás seguro de que quieres salir de la aplicación?',
-          [
-            {
-              text: 'Cancelar',
-              style: 'cancel',
-              onPress: () => null
-            },
-            {
-              text: 'Salir',
-              style: 'destructive',
-              // ✅ CORREGIDO: Navegar a Login en lugar de exitApp()
-              onPress: () => {
-                console.log('🟡 Usuario eligió salir - Navegando a Login');
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Login' }],
-                });
-              }
-            }
-          ]
-        );
-        return true; // Prevenir el comportamiento por defecto
-      }
-      return false;
-    };
+  // ✅ CORREGIDO: Manejar el botón físico de back en HomeScreen
+useEffect(() => {
+  const backAction = () => {
+    // En HomeScreen, el back físico debe cerrar sesión con confirmación
+    if (navigation.isFocused()) {
+      handleLogout(); // Esto ya usa replace('Login')
+      return true; // Prevenir el comportamiento por defecto
+    }
+    return false;
+  };
 
-    const backHandler = BackHandler.addEventListener(
-      'hardwareBackPress',
-      backAction
-    );
+  const backHandler = BackHandler.addEventListener(
+    'hardwareBackPress',
+    backAction
+  );
 
-    return () => backHandler.remove();
-  }, [navigation]);
+  return () => backHandler.remove();
+}, [navigation, handleLogout]);
 
   // Definir los colores originales de cada botón
   const menuItems = [
@@ -85,35 +78,35 @@ const HomeScreen = ({ navigation }) => {
   ];
 
   // Función para cerrar sesión
-  const handleLogout = () => {
-    Alert.alert(
-      'Cerrar Sesión',
-      '¿Estás seguro de que quieres cerrar sesión?',
-      [
-        {
-          text: 'Cancelar',
-          style: 'cancel'
-        },
-        {
-          text: 'Cerrar Sesión',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              await signOut(auth);
-              // Redirigir al login
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } catch (error) {
-              console.error('Error al cerrar sesión:', error);
-              Alert.alert('Error', 'No se pudo cerrar sesión');
-            }
+  // En tu HomeScreen.js, en la función handleLogout
+const handleLogout = () => {
+  Alert.alert(
+    'Cerrar Sesión',
+    '¿Estás seguro de que quieres cerrar sesión?',
+    [
+      {
+        text: 'Cancelar',
+        style: 'cancel'
+      },
+      {
+        text: 'Cerrar Sesión',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            console.log('🔒 Cerrando sesión...');
+            await signOut(auth);
+            // ✅ CORREGIDO: Usar replace en lugar de reset
+            navigation.replace('Login');
+            console.log('✅ Sesión cerrada exitosamente');
+          } catch (error) {
+            console.error('❌ Error al cerrar sesión:', error);
+            Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
           }
         }
-      ]
-    );
-  };
+      }
+    ]
+  );
+};
 
   // ✅ CORREGIDO: Navegación con origen
   const handleNew = () => {
@@ -144,12 +137,18 @@ const HomeScreen = ({ navigation }) => {
 
   const renderHeader = () => (
     <View style={styles.header}>
-      <View style={styles.headerContent}>
-        <View>
-          <Text style={styles.greeting}>Hola, {userName}</Text>
-          <Text style={styles.subtitle}>¿Qué deseas hacer hoy?</Text>
+      <View style={styles.headerTop}>
+        {/* Información del usuario a la izquierda */}
+        <View style={styles.userInfoContainer}>
+          <Text style={styles.greeting} numberOfLines={2} ellipsizeMode="tail">
+            Hola, {userName}
+          </Text>
+          <Text style={styles.welcomeText}>
+            ¿Qué deseas hacer hoy?
+          </Text>
         </View>
-        {/* Botón de cerrar sesión */}
+        
+        {/* Botón de cerrar sesión a la derecha */}
         <TouchableOpacity 
           style={styles.logoutButton} 
           onPress={handleLogout}
@@ -209,27 +208,40 @@ const styles = StyleSheet.create({
   header: {
     marginBottom: 30,
   },
-  headerContent: {
+  headerTop: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
+    marginBottom: 15,
+  },
+  userInfoContainer: {
+    flex: 1,
+    marginRight: 15,
   },
   greeting: {
-    fontSize: 28,
+    fontSize: 24, // Reducido de 28
     fontWeight: 'bold',
     color: '#FFFFFF',
-    marginBottom: 5,
+    marginBottom: 4,
   },
   subtitle: {
-    fontSize: 16,
+    fontSize: 14, // Reducido de 16
     color: '#BB86FC',
+    marginBottom: 8,
+  },
+  welcomeText: {
+    fontSize: 14,
+    color: '#888',
+    marginTop: 4,
   },
   logoutButton: {
-    padding: 8,
+    padding: 10,
     backgroundColor: 'rgba(187, 134, 252, 0.1)',
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
+    minWidth: 44,
+    minHeight: 44,
   },
   newButton: {
     backgroundColor: '#BB86FC',

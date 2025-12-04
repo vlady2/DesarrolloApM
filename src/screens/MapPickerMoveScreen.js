@@ -1,9 +1,10 @@
-// screens/MapPickerScreen.js - VERSIÓN CON API GRATUITA FUNCIONAL
+// screens/MapPickerMoveScreen.js - MAPA PARA MUDANZAS
 import { useEffect, useRef, useState } from 'react';
 import {
     ActivityIndicator,
     Alert,
     Dimensions,
+    SafeAreaView,
     ScrollView,
     StatusBar,
     StyleSheet,
@@ -17,7 +18,9 @@ import { WebView } from 'react-native-webview';
 
 const { width, height } = Dimensions.get('window');
 
-const MapPickerScreen = ({ navigation, route }) => {
+const MapPickerMoveScreen = ({ navigation, route }) => {
+    const { addressType = 'origin', currentAddress = '' } = route.params || {};
+    
     const [selectedLocation, setSelectedLocation] = useState(null);
     const [loading, setLoading] = useState(true);
     const [searchVisible, setSearchVisible] = useState(false);
@@ -26,7 +29,7 @@ const MapPickerScreen = ({ navigation, route }) => {
     const [searching, setSearching] = useState(false);
     const webViewRef = useRef(null);
 
-    // ✅ API GRATUITA Y FUNCIONAL - BigDataCloud
+    // ✅ API GRATUITA Y FUNCIONAL - BigDataCloud (igual que en viajes)
     const getLocationFromCoords = async (lat, lng) => {
         try {
             console.log(`📍 Buscando ubicación: ${lat}, ${lng}`);
@@ -51,6 +54,7 @@ const MapPickerScreen = ({ navigation, route }) => {
                     if (data1 && data1.countryName) {
                         let country = data1.countryName || 'País desconocido';
                         let city = data1.locality || data1.city || data1.principalSubdivision || 'Ubicación seleccionada';
+                        let street = data1.street || data1.locality || '';
                         
                         // Si es El Salvador, mejoramos la precisión
                         if (country === 'El Salvador') {
@@ -66,8 +70,9 @@ const MapPickerScreen = ({ navigation, route }) => {
                         return {
                             latitude: lat,
                             longitude: lng,
-                            address: `${country}, ${city}`,
-                            rawAddress: `${country}, ${city}`,
+                            address: street ? `${street}, ${city}, ${country}` : `${city}, ${country}`,
+                            rawAddress: street ? `${street}, ${city}, ${country}` : `${city}, ${country}`,
+                            street: street,
                             city: city,
                             country: country,
                             source: 'BigDataCloud'
@@ -84,7 +89,7 @@ const MapPickerScreen = ({ navigation, route }) => {
                     `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&zoom=12&addressdetails=1&accept-language=es`,
                     {
                         headers: {
-                            'User-Agent': 'TravelApp/1.0',
+                            'User-Agent': 'MoveApp/1.0',
                             'Accept': 'application/json'
                         }
                     }
@@ -98,6 +103,7 @@ const MapPickerScreen = ({ navigation, route }) => {
                         const addr = data2.address;
                         let country = addr.country || 'País desconocido';
                         let city = '';
+                        let street = addr.road || addr.street || '';
                         
                         // Buscar ciudad en diferentes campos
                         if (addr.city) city = addr.city;
@@ -111,8 +117,9 @@ const MapPickerScreen = ({ navigation, route }) => {
                         return {
                             latitude: lat,
                             longitude: lng,
-                            address: `${country}, ${city}`,
-                            rawAddress: `${country}, ${city}`,
+                            address: street ? `${street}, ${city}, ${country}` : `${city}, ${country}`,
+                            rawAddress: street ? `${street}, ${city}, ${country}` : `${city}, ${country}`,
+                            street: street,
                             city: city,
                             country: country,
                             source: 'OpenStreetMap'
@@ -125,7 +132,7 @@ const MapPickerScreen = ({ navigation, route }) => {
             
             // INTENTO 3: Usar API de GeoNames (gratis)
             try {
-                const username = 'travelapp'; // Nombre de usuario cualquiera para GeoNames
+                const username = 'moveapp'; // Nombre de usuario cualquiera para GeoNames
                 const response3 = await fetch(
                     `http://api.geonames.org/findNearbyPlaceNameJSON?lat=${lat}&lng=${lng}&username=${username}&lang=es`,
                     {
@@ -142,8 +149,9 @@ const MapPickerScreen = ({ navigation, route }) => {
                         return {
                             latitude: lat,
                             longitude: lng,
-                            address: `${place.countryName}, ${place.name}`,
-                            rawAddress: `${place.countryName}, ${place.name}`,
+                            address: `${place.name}, ${place.countryName}`,
+                            rawAddress: `${place.name}, ${place.countryName}`,
+                            street: '',
                             city: place.name,
                             country: place.countryName,
                             source: 'GeoNames'
@@ -168,7 +176,7 @@ const MapPickerScreen = ({ navigation, route }) => {
     const getLocationByCoordinates = (lat, lng) => {
         console.log(`🗺️ Usando fallback por coordenadas: ${lat}, ${lng}`);
         
-        // Base de datos de países y regiones
+        // Base de datos de países y regiones (igual que en viajes)
         const regions = [
             // América Central
             { name: 'El Salvador', latMin: 13.0, latMax: 14.5, lngMin: -90.0, lngMax: -87.5 },
@@ -239,15 +247,16 @@ const MapPickerScreen = ({ navigation, route }) => {
         return {
             latitude: lat,
             longitude: lng,
-            address: `${country}, ${city}`,
-            rawAddress: `${country}, ${city}`,
+            address: `${city}, ${country}`,
+            rawAddress: `${city}, ${country}`,
+            street: '',
             city: city,
             country: country,
             source: 'Fallback por coordenadas'
         };
     };
 
-    // 🗺️ HTML del mapa MEJORADO
+    // 🗺️ HTML del mapa MEJORADO (igual que en viajes)
     const mapHTML = `
 <!DOCTYPE html>
 <html>
@@ -319,7 +328,7 @@ const MapPickerScreen = ({ navigation, route }) => {
                 .setContent(
                     '<div style="padding: 20px; text-align: center; min-width: 220px;">' +
                     '<div style="color: #4285F4; font-size: 36px; margin-bottom: 12px; animation: pulse 1.5s infinite;">📍</div>' +
-                    '<p style="color: white; font-size: 15px; margin-bottom: 15px; font-weight: 500;">Buscando ubicación...</p>' +
+                    '<p style="color: white; font-size: 15px; margin-bottom: 15px; font-weight: 500;">Buscando dirección...</p>' +
                     '<div style="width: 100%; height: 4px; background: #333; border-radius: 2px; overflow: hidden;">' +
                     '<div style="width: 60%; height: 100%; background: #4285F4; animation: loading 1.5s infinite;"></div>' +
                     '</div>' +
@@ -362,10 +371,10 @@ const MapPickerScreen = ({ navigation, route }) => {
                         </div>
                         <div>
                             <h3 style="margin: 0; color: #BB86FC; font-size: 13px; font-weight: 600; letter-spacing: 0.5px;">
-                                UBICACIÓN ENCONTRADA
+                                DIRECCIÓN ENCONTRADA
                             </h3>
                             <p style="margin: 10px 0 0 0; color: white; font-size: 17px; font-weight: bold;">
-                                \${locationData.city}
+                                \${locationData.street ? locationData.street + ', ' : ''}\${locationData.city}
                             </p>
                             <p style="margin: 4px 0 0 0; color: #888; font-size: 14px;">
                                 \${locationData.country}
@@ -379,7 +388,7 @@ const MapPickerScreen = ({ navigation, route }) => {
                             <span style="font-size: 16px;">📝</span> Se guardará como:
                         </p>
                         <p style="margin: 8px 0 0 0; color: white; font-size: 15px; font-weight: 500;">
-                            \${locationData.country}, \${locationData.city}
+                            \${locationData.street ? locationData.street + ', ' : ''}\${locationData.city}, \${locationData.country}
                         </p>
                     </div>
                     
@@ -456,15 +465,16 @@ const MapPickerScreen = ({ navigation, route }) => {
                 setSelectedLocation({
                     latitude,
                     longitude,
-                    address: 'Buscando ubicación...',
+                    address: 'Buscando dirección...',
                     city: 'Cargando...',
-                    country: '...'
+                    country: '...',
+                    street: ''
                 });
                 
                 // 🔥 OBTENER UBICACIÓN CON API GRATUITA
                 const locationData = await getLocationFromCoords(latitude, longitude);
                 
-                console.log('✅ Ubicación obtenida:', locationData);
+                console.log('✅ Dirección obtenida:', locationData);
                 setSelectedLocation(locationData);
                 
                 // Actualizar el mapa
@@ -480,35 +490,32 @@ const MapPickerScreen = ({ navigation, route }) => {
             
         } catch (error) {
             console.error('Error en handleWebViewMessage:', error);
-            Alert.alert('Error', 'No se pudo obtener la ubicación. Intenta nuevamente.');
+            Alert.alert('Error', 'No se pudo obtener la dirección. Intenta nuevamente.');
         }
     };
 
-    // ✅ Confirmar selección
-   const confirmSelection = () => {
-  if (selectedLocation && selectedLocation.country !== '...') {
-    console.log('📍 Confirmando selección para:', selectedLocation);
-    
-    // Verificar si viene de edición (tiene callback)
-    if (route.params?.onSelectLocation) {
-      console.log('🔄 Viene de EditTripScreen - llamando callback');
-      // Llamar al callback con la ubicación seleccionada
-      route.params.onSelectLocation(selectedLocation);
-      // Regresar a la pantalla anterior (EditTripScreen)
-      navigation.goBack();
-    } else {
-      console.log('➕ Viene de NewTripScreen - navegando a NewTrip');
-      // Navegar a NewTripScreen (flujo normal)
-      navigation.navigate('NewTrip', { 
-        selectedLocation: selectedLocation
-      });
-    }
-  } else {
-    Alert.alert('Espera', 'Estamos obteniendo la ubicación...');
-  }
-};
+    // ✅ Confirmar selección - MANEJA AMBOS CASOS (NUEVA MUDANZA Y EDICIÓN)
+    const confirmSelection = () => {
+        if (selectedLocation && selectedLocation.country !== '...') {
+            console.log('📍 Confirmando selección para mudanza:', selectedLocation);
+            
+            // Verificar si viene con callback (edición o nueva mudanza)
+            if (route.params?.onSelectAddress) {
+                console.log('🔄 Viene de pantalla de mudanza - llamando callback');
+                // Llamar al callback con la dirección seleccionada
+                route.params.onSelectAddress(selectedLocation.address, addressType);
+                // Regresar a la pantalla anterior (NewMoveScreen o EditMoveScreen)
+                navigation.goBack();
+            } else {
+                // Si no hay callback, mostrar alerta (no debería pasar)
+                Alert.alert('Error', 'No se pudo guardar la dirección seleccionada.');
+            }
+        } else {
+            Alert.alert('Espera', 'Estamos obteniendo la dirección...');
+        }
+    };
 
-    // 🔍 Búsqueda de países
+    // 🔍 Búsqueda de países (igual que en viajes)
     const COUNTRIES_WITH_COORDS = [
         { name: 'El Salvador', lat: 13.6929, lng: -89.2182 },
         { name: 'Guatemala', lat: 14.6349, lng: -90.5069 },
@@ -599,7 +606,27 @@ const MapPickerScreen = ({ navigation, route }) => {
         }
     }, [searchVisible]);
 
-    // Estilos (los mismos que antes)
+    // Cargar dirección actual si existe
+    useEffect(() => {
+        if (currentAddress) {
+            // Puedes implementar geocodificación inversa aquí si quieres centrar en la dirección
+            console.log('📍 Dirección actual:', currentAddress);
+        }
+    }, [currentAddress]);
+
+    // Obtener título según tipo de dirección
+    const getTitle = () => {
+        switch(addressType) {
+            case 'origin':
+                return 'Seleccionar Origen';
+            case 'destination':
+                return 'Seleccionar Destino';
+            default:
+                return 'Seleccionar Dirección';
+        }
+    };
+
+    // Estilos
     const styles = StyleSheet.create({
         container: { flex: 1, backgroundColor: '#121212' },
         header: {
@@ -754,6 +781,18 @@ const MapPickerScreen = ({ navigation, route }) => {
             fontWeight: '600',
             marginRight: 6,
         },
+        addressTypeBadge: {
+            backgroundColor: addressType === 'origin' ? '#FF9800' : '#2196F3',
+            paddingHorizontal: 10,
+            paddingVertical: 4,
+            borderRadius: 12,
+            marginRight: 10,
+        },
+        addressTypeText: {
+            color: 'white',
+            fontSize: 11,
+            fontWeight: '600',
+        },
         searchingContainer: {
             flex: 1,
             justifyContent: 'center',
@@ -764,173 +803,181 @@ const MapPickerScreen = ({ navigation, route }) => {
     });
 
     return (
-        <>
+        <SafeAreaView style={styles.container}>
             <StatusBar backgroundColor="#121212" barStyle="light-content" />
-            <View style={styles.container}>
-                {/* HEADER */}
-                <View style={styles.header}>
-                    <TouchableOpacity 
-                        style={styles.backButton}
-                        onPress={() => navigation.goBack()}
-                    >
-                        <Icon name="arrow-back" size={24} color="#BB86FC" />
-                    </TouchableOpacity>
-                    
-                    <Text style={styles.title}>Seleccionar Ubicación</Text>
-                    
-                    <TouchableOpacity 
-                        style={styles.searchButton}
-                        onPress={() => setSearchVisible(true)}
-                    >
-                        <Icon name="search" size={22} color="#BB86FC" />
-                    </TouchableOpacity>
+            
+            {/* HEADER */}
+            <View style={styles.header}>
+                <TouchableOpacity 
+                    style={styles.backButton}
+                    onPress={() => navigation.goBack()}
+                >
+                    <Icon name="arrow-back" size={24} color="#BB86FC" />
+                </TouchableOpacity>
+                
+                <View style={{ flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center' }}>
+                    <View style={styles.addressTypeBadge}>
+                        <Text style={styles.addressTypeText}>
+                            {addressType === 'origin' ? 'ORIGEN' : 'DESTINO'}
+                        </Text>
+                    </View>
+                    <Text style={styles.title}>{getTitle()}</Text>
                 </View>
+                
+                <TouchableOpacity 
+                    style={styles.searchButton}
+                    onPress={() => setSearchVisible(true)}
+                >
+                    <Icon name="search" size={22} color="#BB86FC" />
+                </TouchableOpacity>
+            </View>
 
-                {/* BÚSQUEDA */}
-                {searchVisible && (
-                    <View style={styles.searchContainer}>
-                        <View style={styles.searchHeader}>
-                            <View style={styles.searchBox}>
-                                <Icon name="search" size={22} color="#BB86FC" />
-                                <TextInput
-                                    style={styles.searchInput}
-                                    placeholder="Buscar país..."
-                                    placeholderTextColor="#888"
-                                    value={searchQuery}
-                                    onChangeText={handleSearchChange}
-                                    autoFocus={true}
-                                />
-                                {searchQuery.length > 0 && (
-                                    <TouchableOpacity onPress={() => {
-                                        setSearchQuery('');
-                                        searchCountries('');
-                                    }}>
-                                        <Icon name="close" size={20} color="#888" />
-                                    </TouchableOpacity>
-                                )}
-                            </View>
-                            <TouchableOpacity 
-                                style={styles.searchCancel}
-                                onPress={() => {
-                                    setSearchVisible(false);
+            {/* BÚSQUEDA */}
+            {searchVisible && (
+                <View style={styles.searchContainer}>
+                    <View style={styles.searchHeader}>
+                        <View style={styles.searchBox}>
+                            <Icon name="search" size={22} color="#BB86FC" />
+                            <TextInput
+                                style={styles.searchInput}
+                                placeholder="Buscar país..."
+                                placeholderTextColor="#888"
+                                value={searchQuery}
+                                onChangeText={handleSearchChange}
+                                autoFocus={true}
+                            />
+                            {searchQuery.length > 0 && (
+                                <TouchableOpacity onPress={() => {
                                     setSearchQuery('');
-                                    setSearchResults([]);
-                                }}
-                            >
-                                <Text style={styles.searchCancelText}>Cerrar</Text>
-                            </TouchableOpacity>
+                                    searchCountries('');
+                                }}>
+                                    <Icon name="close" size={20} color="#888" />
+                                </TouchableOpacity>
+                            )}
                         </View>
-
-                        {/* RESULTADOS */}
-                        {searching ? (
-                            <View style={styles.searchingContainer}>
-                                <ActivityIndicator size="small" color="#BB86FC" />
-                                <Text style={styles.searchingText}>Buscando...</Text>
-                            </View>
-                        ) : (
-                            <ScrollView style={styles.resultsContainer}>
-                                <Text style={styles.resultsTitle}>
-                                    {searchQuery === '' ? 'Todos los países' : 'Resultados'}
-                                </Text>
-                                
-                                {searchResults.map((country, index) => (
-                                    <TouchableOpacity
-                                        key={index}
-                                        style={styles.resultItem}
-                                        onPress={() => handleSelectCountry(country)}
-                                    >
-                                        <Icon name="public" size={22} color="#4CAF50" />
-                                        <View style={styles.resultInfo}>
-                                            <Text style={styles.resultName}>
-                                                {country.name}
-                                            </Text>
-                                        </View>
-                                        <Icon name="chevron-right" size={20} color="#666" />
-                                    </TouchableOpacity>
-                                ))}
-                            </ScrollView>
-                        )}
+                        <TouchableOpacity 
+                            style={styles.searchCancel}
+                            onPress={() => {
+                                setSearchVisible(false);
+                                setSearchQuery('');
+                                setSearchResults([]);
+                            }}
+                        >
+                            <Text style={styles.searchCancelText}>Cerrar</Text>
+                        </TouchableOpacity>
                     </View>
-                )}
 
-                {/* LOADING */}
-                {loading && (
-                    <View style={styles.loadingOverlay}>
-                        <ActivityIndicator size={50} color="#BB86FC" />
-                        <Text style={styles.loadingText}>Cargando mapa...</Text>
-                    </View>
-                )}
-
-                {/* MAPA */}
-                <WebView
-                    ref={webViewRef}
-                    source={{ html: mapHTML }}
-                    style={styles.map}
-                    javaScriptEnabled={true}
-                    domStorageEnabled={true}
-                    onMessage={handleWebViewMessage}
-                    onLoadEnd={() => setLoading(false)}
-                    onError={(error) => console.error('WebView error:', error)}
-                />
-
-                {/* PANEL DE DESTINO SELECCIONADO */}
-                {selectedLocation && (
-                    <View style={styles.bottomPanel}>
-                        <View style={styles.selectedLocationCard}>
-                            <View style={styles.locationHeader}>
-                                <Icon name="check-circle" size={24} color="#4CAF50" />
-                                <View style={styles.locationInfo}>
-                                    <Text style={styles.locationTitle}>Destino Seleccionado</Text>
-                                    <Text style={styles.locationAddress} numberOfLines={1}>
-                                        {selectedLocation.country}, {selectedLocation.city}
-                                    </Text>
-                                    <Text style={styles.locationCoords}>
-                                        {selectedLocation.latitude?.toFixed(6)}°, {selectedLocation.longitude?.toFixed(6)}°
-                                    </Text>
-                                </View>
-                            </View>
-                            
-                            <Text style={styles.saveNote}>
-                                Se guardará como: {selectedLocation.country}, {selectedLocation.city}
+                    {/* RESULTADOS */}
+                    {searching ? (
+                        <View style={styles.searchingContainer}>
+                            <ActivityIndicator size="small" color="#BB86FC" />
+                            <Text style={styles.searchingText}>Buscando...</Text>
+                        </View>
+                    ) : (
+                        <ScrollView style={styles.resultsContainer}>
+                            <Text style={styles.resultsTitle}>
+                                {searchQuery === '' ? 'Todos los países' : 'Resultados'}
                             </Text>
                             
-                            <View style={styles.actionsRow}>
-                                <TouchableOpacity 
-                                    style={styles.chooseAnotherButton}
-                                    onPress={() => {
-                                        setSelectedLocation(null);
-                                        if (webViewRef.current) {
-                                            webViewRef.current.injectJavaScript(`
-                                                if (window.selectionMarker) {
-                                                    window.selectionMarker.remove();
-                                                    window.selectionMarker = null;
-                                                }
-                                                if (window.currentPopup) {
-                                                    map.closePopup();
-                                                    window.currentPopup = null;
-                                                }
-                                            `);
-                                        }
-                                    }}
+                            {searchResults.map((country, index) => (
+                                <TouchableOpacity
+                                    key={index}
+                                    style={styles.resultItem}
+                                    onPress={() => handleSelectCountry(country)}
                                 >
-                                    <Icon name="cancel" size={18} color="#BB86FC" />
-                                    <Text style={styles.chooseAnotherText}>Cambiar</Text>
+                                    <Icon name="public" size={22} color="#4CAF50" />
+                                    <View style={styles.resultInfo}>
+                                        <Text style={styles.resultName}>
+                                            {country.name}
+                                        </Text>
+                                    </View>
+                                    <Icon name="chevron-right" size={20} color="#666" />
                                 </TouchableOpacity>
-                                
-                                <TouchableOpacity 
-                                    style={styles.useButton}
-                                    onPress={confirmSelection}
-                                >
-                                    <Text style={styles.useButtonText}>Usar Destino</Text>
-                                    <Icon name="check" size={18} color="white" />
-                                </TouchableOpacity>
+                            ))}
+                        </ScrollView>
+                    )}
+                </View>
+            )}
+
+            {/* LOADING */}
+            {loading && (
+                <View style={styles.loadingOverlay}>
+                    <ActivityIndicator size={50} color="#BB86FC" />
+                    <Text style={styles.loadingText}>Cargando mapa...</Text>
+                </View>
+            )}
+
+            {/* MAPA */}
+            <WebView
+                ref={webViewRef}
+                source={{ html: mapHTML }}
+                style={styles.map}
+                javaScriptEnabled={true}
+                domStorageEnabled={true}
+                onMessage={handleWebViewMessage}
+                onLoadEnd={() => setLoading(false)}
+                onError={(error) => console.error('WebView error:', error)}
+            />
+
+            {/* PANEL DE DIRECCIÓN SELECCIONADA */}
+            {selectedLocation && (
+                <View style={styles.bottomPanel}>
+                    <View style={styles.selectedLocationCard}>
+                        <View style={styles.locationHeader}>
+                            <Icon name="check-circle" size={24} color="#4CAF50" />
+                            <View style={styles.locationInfo}>
+                                <Text style={styles.locationTitle}>
+                                    {addressType === 'origin' ? 'Origen Seleccionado' : 'Destino Seleccionado'}
+                                </Text>
+                                <Text style={styles.locationAddress} numberOfLines={2}>
+                                    {selectedLocation.address}
+                                </Text>
+                                <Text style={styles.locationCoords}>
+                                    {selectedLocation.latitude?.toFixed(6)}°, {selectedLocation.longitude?.toFixed(6)}°
+                                </Text>
                             </View>
                         </View>
+                        
+                        <Text style={styles.saveNote}>
+                            Se guardará como: {selectedLocation.address}
+                        </Text>
+                        
+                        <View style={styles.actionsRow}>
+                            <TouchableOpacity 
+                                style={styles.chooseAnotherButton}
+                                onPress={() => {
+                                    setSelectedLocation(null);
+                                    if (webViewRef.current) {
+                                        webViewRef.current.injectJavaScript(`
+                                            if (window.selectionMarker) {
+                                                window.selectionMarker.remove();
+                                                window.selectionMarker = null;
+                                            }
+                                            if (window.currentPopup) {
+                                                map.closePopup();
+                                                window.currentPopup = null;
+                                            }
+                                        `);
+                                    }
+                                }}
+                            >
+                                <Icon name="cancel" size={18} color="#BB86FC" />
+                                <Text style={styles.chooseAnotherText}>Cambiar</Text>
+                            </TouchableOpacity>
+                            
+                            <TouchableOpacity 
+                                style={styles.useButton}
+                                onPress={confirmSelection}
+                            >
+                                <Text style={styles.useButtonText}>Usar Dirección</Text>
+                                <Icon name="check" size={18} color="white" />
+                            </TouchableOpacity>
+                        </View>
                     </View>
-                )}
-            </View>
-        </>
+                </View>
+            )}
+        </SafeAreaView>
     );
 };
 
-export default MapPickerScreen;
+export default MapPickerMoveScreen;
