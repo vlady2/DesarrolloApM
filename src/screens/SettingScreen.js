@@ -37,7 +37,7 @@ const SettingScreen = ({ navigation }) => {
         {
             title: 'Perfil',
             icon: '👤',
-            onPress: () => console.log('Perfil presionado')
+            onPress: () => navigation.navigate('ProfileScreen')
         },
         {
             title: 'Notificaciones',

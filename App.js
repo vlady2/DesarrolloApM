@@ -30,6 +30,7 @@ import NewBoxScreen from './src/screens/NewBoxScreen';
 import NewMaletaScreen from './src/screens/NewMaletaScreen';
 import NewMoveScreen from './src/screens/NewMoveScreen';
 import NewTripScreen from './src/screens/NewTripScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
 import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
 
@@ -164,6 +165,11 @@ export default function App() {
         <Stack.Screen
           name="MapPickerMove"
           component={MapPickerMoveScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="ProfileScreen"
+          component={ProfileScreen}
           options={{ headerShown: false }}
         />
       </Stack.Navigator>
