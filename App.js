@@ -168,7 +168,7 @@ export default function App() {
           options={{ headerShown: false }}
         />
         <Stack.Screen
-          name="ProfileScreen"
+          name="Profile"
           component={ProfileScreen}
           options={{ headerShown: false }}
         />
