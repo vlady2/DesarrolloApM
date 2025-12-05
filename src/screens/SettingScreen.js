@@ -39,7 +39,7 @@ const SettingScreen = ({ navigation }) => {
             icon: '👤',
             onPress: () => navigation.navigate('ProfileScreen')
         },
-        {
+        /*{
             title: 'Notificaciones',
             icon: '🔔',
             onPress: () => console.log('Notificaciones presionado')
@@ -48,7 +48,7 @@ const SettingScreen = ({ navigation }) => {
             title: 'Privacidad',
             icon: '🔒',
             onPress: () => console.log('Privacidad presionado')
-        },
+        },*/
         {
             title: 'Ayuda y Soporte',
             icon: '❓',
