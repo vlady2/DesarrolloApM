@@ -4,7 +4,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -70,7 +72,7 @@ const PAISES_CON_RESTRICCIONES_ESPECIALES = {
     otros: ['Armas de defensa personal', 'Fuegos artificiales']
   },
   'reino unido': {
-    alimentos: ['Carne y productos cárnicos de países no UE', 'Leche cruda'],
+    alimentos: ['Carne y productos cárnicos de países no UE', 'Leche rawa'],
     otros: ['Especies en peligro (CITES)', 'Productos culturales robados']
   }
 };
@@ -444,12 +446,20 @@ Ejemplo formato respuesta: "Articulo, Articulo, Articulo, Articulo ..."`;
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+    behavior="padding"
+    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
       
       {renderHeader()}
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {forceLuggage && (
           <View style={styles.requiredSection}>
             <Ionicons name="warning" size={16} color="#FFA500" />
@@ -687,7 +697,7 @@ Ejemplo formato respuesta: "Articulo, Articulo, Articulo, Articulo ..."`;
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -723,6 +733,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
   },
   requiredSection: {
     flexDirection: 'row',

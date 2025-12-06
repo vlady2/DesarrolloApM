@@ -1,4 +1,4 @@
-// MoveDetailScreen.js - VERSIÓN COMPLETA CON PERMISOS
+// MoveDetailScreen.js - VERSIÓN CORREGIDA
 import { useEffect, useState } from 'react';
 import {
     Alert,
@@ -15,7 +15,7 @@ import {
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { deleteBox, getBoxesByMoveId } from '../../firebase/boxService';
-import { deleteMove } from '../../firebase/moveService';
+import { deleteMove, getMoveById } from '../../firebase/moveService';
 
 // ✅ FUNCIÓN AUXILIAR: Verificar si una caja tiene items válidos
 const hasBoxValidItems = (box) => {
@@ -165,14 +165,18 @@ const getMoveStatus = (move, boxes = []) => {
 };
 
 const MoveDetailScreen = ({ route, navigation }) => {
-    const { moveId, moveOrigin, moveDestination, moveType } = route.params;
+    const { moveId, moveOrigin, moveDestination, moveType, moveDate: paramMoveDate } = route.params;
+    
+    // ✅ CORREGIDO: Inicializar estado con datos de parámetros
     const [move, setMove] = useState({
         id: moveId,
-        origin: moveOrigin,
-        destination: moveDestination,
-        moveType: moveType,
-        moveDate: route.params.moveDate || null
+        origin: moveOrigin || '',
+        destination: moveDestination || '',
+        moveType: moveType || 'residential',
+        moveDate: paramMoveDate || null,
+        notes: ''
     });
+    
     const [boxes, setBoxes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedBox, setSelectedBox] = useState(null);
@@ -198,21 +202,54 @@ const MoveDetailScreen = ({ route, navigation }) => {
         return () => backHandler.remove();
     }, [navigation]);
 
+    // ✅ CORREGIDO: Cargar datos siempre
     useEffect(() => {
-        loadMoveDetails();
-        loadBoxes();
+        const loadData = async () => {
+            await loadMoveDetails();
+            await loadBoxes();
+        };
+        
+        loadData();
     }, [moveId]);
+
+    // ✅ Listener para cuando la pantalla recibe foco
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', () => {
+            console.log('🎯 MoveDetailScreen enfocada - recargando datos');
+            loadMoveDetails();
+            loadBoxes();
+        });
+
+        return unsubscribe;
+    }, [navigation, moveId]);
 
     const loadMoveDetails = async () => {
         try {
-            // Si hay parámetros de fecha, actualizar el estado
-            if (route.params.moveDate) {
-                setMove(prev => ({
-                    ...prev,
-                    moveDate: route.params.moveDate
-                }));
+            console.log('🟡 Cargando detalles de mudanza desde Firebase:', moveId);
+            
+            const moveData = await getMoveById(moveId);
+            
+            if (moveData) {
+                console.log('✅ Datos cargados de Firebase:', {
+                    origin: moveData.origin,
+                    destination: moveData.destination,
+                    moveType: moveData.moveType,
+                    moveDate: moveData.moveDate
+                });
+                
+                // ✅ Actualizar estado con TODOS los datos de Firebase
+                setMove({
+                    id: moveId,
+                    origin: moveData.origin || '',
+                    destination: moveData.destination || '',
+                    moveType: moveData.moveType || 'residential',
+                    moveDate: moveData.moveDate || null,
+                    notes: moveData.notes || ''
+                });
+            } else {
+                console.log('⚠️ No se encontraron datos en Firebase');
             }
-            console.log('🟡 Cargando detalles de mudanza:', moveId);
+            
         } catch (error) {
             console.log('❌ Error cargando detalles:', error);
         }
@@ -222,7 +259,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
         try {
             console.log('🟡 Buscando cajas para moveId:', moveId);
             const boxesList = await getBoxesByMoveId(moveId);
-            console.log('🟢 Total cajas encontradas:', boxesList.length, 'para moveId:', moveId);
+            console.log('🟢 Total cajas encontradas:', boxesList.length);
             setBoxes(boxesList);
         } catch (error) {
             console.log('❌ Error cargando cajas:', error);
@@ -332,22 +369,18 @@ const MoveDetailScreen = ({ route, navigation }) => {
             return;
         }
 
-        // ✅ Cerrar el modal primero
         closeActionsModal();
 
-        // ✅ Esperar un momento para que el modal se cierre completamente
         setTimeout(() => {
-            // ✅ Ahora mostrar la alerta de confirmación
             Alert.alert(
                 'Eliminar Mudanza',
-                `¿Estás seguro de eliminar la mudanza "${moveOrigin || 'Origen'} → ${moveDestination || 'Destino'}"?`,
+                `¿Estás seguro de eliminar la mudanza "${move.origin || 'Origen'} → ${move.destination || 'Destino'}"?`,
                 [
                     {
                         text: 'Cancelar',
                         style: 'cancel',
                         onPress: () => {
-                            console.log('✅ Eliminación de mudanza cancelada por el usuario');
-                            // NO hacer nada - el usuario canceló
+                            console.log('✅ Eliminación de mudanza cancelada');
                         }
                     },
                     {
@@ -359,7 +392,6 @@ const MoveDetailScreen = ({ route, navigation }) => {
                         }
                     }
                 ],
-                // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
                 { cancelable: false }
             );
         }, 100);
@@ -369,8 +401,6 @@ const MoveDetailScreen = ({ route, navigation }) => {
         try {
             console.log('🟡 Eliminando mudanza:', moveId);
             await deleteMove(moveId);
-
-            // ✅ Navegar después de eliminar
             navigation.navigate('MyTrips');
 
         } catch (error) {
@@ -391,12 +421,9 @@ const MoveDetailScreen = ({ route, navigation }) => {
             return;
         }
 
-        // ✅ Cerrar el modal primero
         closeBoxModal();
 
-        // ✅ Esperar un momento para que el modal se cierre completamente
         setTimeout(() => {
-            // ✅ Ahora mostrar la alerta de confirmación
             Alert.alert(
                 'Eliminar Caja',
                 `¿Estás seguro de eliminar "${boxItem.nombre || 'esta caja'}"?`,
@@ -405,8 +432,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
                         text: 'Cancelar',
                         style: 'cancel',
                         onPress: () => {
-                            console.log('✅ Eliminación de caja cancelada por el usuario');
-                            // NO hacer nada - el usuario canceló
+                            console.log('✅ Eliminación de caja cancelada');
                         }
                     },
                     {
@@ -418,7 +444,6 @@ const MoveDetailScreen = ({ route, navigation }) => {
                         }
                     }
                 ],
-                // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
                 { cancelable: false }
             );
         }, 100);
@@ -428,11 +453,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
         try {
             console.log('🟡 Eliminando caja:', boxItem.id, 'de mudanza:', moveId);
             await deleteBox(moveId, boxItem.id);
-
-            // ✅ Actualizar la lista después de eliminar
             setBoxes(prevBoxes => prevBoxes.filter(item => item.id !== boxItem.id));
-
-            // ✅ Mostrar confirmación
             Alert.alert('✅', 'Caja eliminada correctamente');
 
         } catch (error) {
@@ -456,9 +477,9 @@ const MoveDetailScreen = ({ route, navigation }) => {
         closeBoxModal();
         navigation.navigate('NewBox', {
             moveId: moveId,
-            origin: moveOrigin,
-            destination: moveDestination,
-            moveType: moveType,
+            origin: move.origin, // ✅ Usar datos del estado, no parámetros
+            destination: move.destination,
+            moveType: move.moveType,
             originScreen: 'MoveDetail',
             boxToEdit: boxItem,
             mode: 'edit'
@@ -483,11 +504,12 @@ const MoveDetailScreen = ({ route, navigation }) => {
 
         navigation.navigate('EditMove', {
             moveId: moveId,
-            moveOrigin: moveOrigin,
-            moveDestination: moveDestination,
-            moveType: moveType,
+            moveOrigin: move.origin, // ✅ Usar datos del estado
+            moveDestination: move.destination,
+            moveType: move.moveType,
             origin: 'MoveDetail',
-            moveDate: move.moveDate
+            moveDate: move.moveDate,
+            notes: move.notes
         });
     };
 
@@ -495,7 +517,6 @@ const MoveDetailScreen = ({ route, navigation }) => {
         const moveStatus = getMoveStatusForMove();
 
         if (!moveStatus.canEditBoxes) {
-            // Si está fallida pero puede editar cajas (hoy fallida), dar opción
             if (moveStatus.status === 'Fallida' && moveStatus.canEditBoxes) {
                 Alert.alert(
                     'Mudanza Fallida',
@@ -507,9 +528,9 @@ const MoveDetailScreen = ({ route, navigation }) => {
                             onPress: () => {
                                 navigation.navigate('NewBox', {
                                     moveId: moveId,
-                                    origin: moveOrigin,
-                                    destination: moveDestination,
-                                    moveType: moveType,
+                                    origin: move.origin, // ✅ Usar datos del estado
+                                    destination: move.destination,
+                                    moveType: move.moveType,
                                     originScreen: 'MoveDetail',
                                     forceBoxes: true
                                 });
@@ -530,20 +551,20 @@ const MoveDetailScreen = ({ route, navigation }) => {
 
         navigation.navigate('NewBox', {
             moveId: moveId,
-            origin: moveOrigin,
-            destination: moveDestination,
-            moveType: moveType,
+            origin: move.origin, // ✅ Usar datos del estado
+            destination: move.destination,
+            moveType: move.moveType,
             originScreen: 'MoveDetail'
         });
     };
 
     const getMoveTypeLabel = () => {
-        switch (moveType) {
-            case 'residential': return '🚚 Mudanza Residencial';
-            case 'office': return '🏢 Mudanza de Oficina';
-            case 'personal': return '🚛 Mudanza Personal' ;
-            case 'company': return '🏭 Mudanza para Empresa';
-            case 'other': return '🏠 Otro tipo';
+        switch (move.moveType) { // ✅ Usar move.moveType del estado
+            case 'residential': return '🏠 Mudanza residencial';
+            case 'office': return '🏢 Mudanza para oficina';
+            case 'personal': return '👤 Mudanza particular';
+            case 'company': return '🏭 Mudanza para empresa';
+            case 'other': return '🚚 Otro tipo de mudanza';
             default: return 'Tipo de mudanza';
         }
     };
@@ -561,6 +582,13 @@ const MoveDetailScreen = ({ route, navigation }) => {
         }
     };
 
+    // ✅ Agregar botón de recarga
+    const handleRefresh = () => {
+        loadMoveDetails();
+        loadBoxes();
+        Alert.alert('✅', 'Datos actualizados');
+    };
+
     const moveStatus = getMoveStatusForMove();
     const totalItems = getTotalItems();
     const totalWeight = getTotalWeight();
@@ -568,7 +596,6 @@ const MoveDetailScreen = ({ route, navigation }) => {
     const boxesWithItems = getBoxesWithItemsCount();
     const boxesByRoom = getBoxesByRoom();
     
-    // ✅ Verificar si hay cajas vacías o sin items
     const hasEmptyBoxes = boxes.length > 0 && boxesWithItems === 0;
     const hasNoBoxesAtAll = boxes.length === 0;
 
@@ -583,6 +610,15 @@ const MoveDetailScreen = ({ route, navigation }) => {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Detalle de Mudanza</Text>
                 <View style={styles.headerActions}>
+                    {/* Botón de actualizar */}
+                    <TouchableOpacity 
+                        onPress={handleRefresh} 
+                        style={styles.headerButton}
+                    >
+                        <Ionicons name="refresh" size={22} color="#4CAF50" />
+                    </TouchableOpacity>
+                    
+                    {/* Botón de editar */}
                     <TouchableOpacity 
                         onPress={navigateToEditMove} 
                         style={styles.headerButton}
@@ -590,21 +626,23 @@ const MoveDetailScreen = ({ route, navigation }) => {
                     >
                         <Ionicons 
                             name="create" 
-                            size={24} 
+                            size={22} 
                             color={!moveStatus.canEdit ? "#666" : "#2196F3"} 
                         />
                     </TouchableOpacity>
+                    
+                    {/* Botón de acciones */}
                     <TouchableOpacity onPress={openActionsModal} style={styles.headerButton}>
-                        <Ionicons name="ellipsis-vertical" size={24} color="#FFFFFF" />
+                        <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            <ScrollView style={styles.content}>
-                {/* Título Principal */}
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                {/* Título Principal - ✅ Usar move.origin y move.destination del estado */}
                 <View style={styles.mainTitleSection}>
                     <Text style={styles.mainTitle}>
-                        {moveOrigin} → {moveDestination}
+                        {move.origin || 'Origen no especificado'} → {move.destination || 'Destino no especificado'}
                     </Text>
                     <View style={[styles.statusBadge, { backgroundColor: moveStatus.color }]}>
                         <Text style={styles.statusText}>{moveStatus.status}</Text>
@@ -694,7 +732,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
                     </View>
                 </View>
 
-                {/* Información de la Mudanza */}
+                {/* Información de la Mudanza - ✅ Usar datos del estado move */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>📋 Información de la Mudanza</Text>
                     <View style={styles.infoCard}>
@@ -718,14 +756,14 @@ const MoveDetailScreen = ({ route, navigation }) => {
                             <Ionicons name="location" size={20} color="#2196F3" />
                             <View style={styles.infoContent}>
                                 <Text style={styles.infoLabel}>Origen</Text>
-                                <Text style={styles.infoValue}>{moveOrigin || 'No especificado'}</Text>
+                                <Text style={styles.infoValue}>{move.origin || 'No especificado'}</Text>
                             </View>
                         </View>
                         <View style={styles.infoRow}>
                             <Ionicons name="flag" size={20} color="#4CAF50" />
                             <View style={styles.infoContent}>
                                 <Text style={styles.infoLabel}>Destino</Text>
-                                <Text style={styles.infoValue}>{moveDestination || 'No especificado'}</Text>
+                                <Text style={styles.infoValue}>{move.destination || 'No especificado'}</Text>
                             </View>
                         </View>
                     </View>
@@ -1089,10 +1127,10 @@ const styles = StyleSheet.create({
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 10, // ✅ Espacio entre botones
     },
     headerButton: {
         padding: 4,
-        marginLeft: 12,
     },
     content: {
         flex: 1,

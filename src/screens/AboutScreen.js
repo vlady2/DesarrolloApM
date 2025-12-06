@@ -129,7 +129,7 @@ const AboutScreen = ({ navigation }) => {
     { name: 'Bryan Valdivieso', role: 'CEO', emoji: '👨‍💻' },
     { name: 'Nelson ', role: 'CTO', emoji: '👨‍💻' },
     { name: 'Cristel', role: 'Diseñadora UX/UI', emoji: '🎨' },
-    { name: 'Kevin', role: 'AI Engineer', emoji: '🤖' },
+    { name: 'Vladimir', role: 'AI Engineer', emoji: '🤖' },
     { name: 'Kevin', role: 'Developer', emoji: '👨‍💻' },
   ];
 

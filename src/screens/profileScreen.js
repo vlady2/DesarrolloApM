@@ -1,7 +1,7 @@
-// ProfileScreen.js - VERSIÓN CORREGIDA (MUDANZAS ARREGLADO)
+// ProfileScreen.js - CON KEYBOARDAVOIDINGVIEW CORREGIDO
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
-import { updateProfile } from 'firebase/auth'; // Para actualizar displayName
+import { updateProfile } from 'firebase/auth';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
@@ -9,6 +9,8 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
   Platform,
   RefreshControl,
@@ -19,6 +21,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -72,6 +75,7 @@ const ProfileScreen = ({ navigation }) => {
   const scrollY = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
   const scrollViewRef = useRef(null);
+  const modalInputRef = useRef(null);
 
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 150],
@@ -116,14 +120,12 @@ const ProfileScreen = ({ navigation }) => {
         return;
       }
 
-      // 🔹 Datos básicos de Auth
       const basicData = {
         name: user.displayName || 'Viajero',
         email: user.email || '',
         memberSince: user.metadata.creationTime || new Date().toLocaleDateString(),
       };
 
-      // 🔹 Cargar datos adicionales de Firestore
       const userDoc = await getDoc(doc(db, 'users', user.uid));
       let userDocData = {};
 
@@ -145,12 +147,10 @@ const ProfileScreen = ({ navigation }) => {
 
       setUserData(mergedData);
 
-      // 🔹 Cargar configuración
       if (userDocData.settings) {
         setSettings(userDocData.settings);
       }
 
-      // 🔹 Calcular estadísticas REALES
       await calculateRealStats(user.uid);
 
     } catch (error) {
@@ -162,16 +162,13 @@ const ProfileScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ FUNCIÓN CORREGIDA: Calcular estadísticas REALES desde Firestore
   const calculateRealStats = async (userId) => {
     try {
-      // Importar servicios necesarios
       const { getUserTrips } = require('../../firebase/tripService');
       const { getAllUserBoxes } = require('../../firebase/boxService');
       const { getUserMoves } = require('../../firebase/moveService');
       const { getAllUserLuggage } = require('../../firebase/luggageService');
 
-      // Obtener datos reales en paralelo
       const [userTrips, userBoxes, userMoves, userLuggage] = await Promise.all([
         getUserTrips().catch(() => []),
         getAllUserBoxes().catch(() => []),
@@ -179,14 +176,6 @@ const ProfileScreen = ({ navigation }) => {
         getAllUserLuggage().catch(() => [])
       ]);
 
-      console.log('📊 Datos obtenidos:', {
-        viajes: userTrips.length,
-        cajas: userBoxes.length,
-        mudanzas: userMoves.length,
-        maletas: userLuggage.length
-      });
-
-      // Calcular viajes completados
       const today = new Date();
       today.setHours(0, 0, 0, 0);
 
@@ -209,14 +198,12 @@ const ProfileScreen = ({ navigation }) => {
         }
       }).length;
 
-      // ✅ NUEVO: Calcular mudanzas activas y completadas
       const currentDate = new Date();
       let movesActive = 0;
       let movesCompleted = 0;
 
       userMoves.forEach(move => {
         if (!move.moveDate) {
-          // Si no tiene fecha, se considera planificada (activa)
           movesActive++;
           return;
         }
@@ -238,17 +225,15 @@ const ProfileScreen = ({ navigation }) => {
           }
         } catch (error) {
           console.log('❌ Error procesando fecha de mudanza:', error);
-          movesActive++; // Por defecto, considerar activa
+          movesActive++;
         }
       });
 
-      // Calcular peso total real (de cajas)
       let totalWeight = 0;
       userBoxes.forEach(box => {
         totalWeight += parseFloat(box.peso) || 0;
       });
 
-      // Calcular países visitados
       const countries = new Set();
       userTrips.forEach(trip => {
         if (trip.destination) {
@@ -264,7 +249,7 @@ const ProfileScreen = ({ navigation }) => {
         totalLuggage: userLuggage.length,
         countriesVisited: countries.size,
         totalWeight: Math.round(totalWeight),
-        savedSpace: Math.round(totalWeight * 0.3), // Estimación
+        savedSpace: Math.round(totalWeight * 0.3),
         tripsCompleted,
         tripsPlanned: userTrips.length - tripsCompleted,
         movesActive,
@@ -281,6 +266,12 @@ const ProfileScreen = ({ navigation }) => {
     setSelectedField(field);
     setEditValue(value || '');
     setEditModalVisible(true);
+    
+    setTimeout(() => {
+      if (modalInputRef.current) {
+        modalInputRef.current.focus();
+      }
+    }, 100);
   };
 
   const saveField = async () => {
@@ -307,7 +298,6 @@ const ProfileScreen = ({ navigation }) => {
           authUpdate: false,
           label: 'Estilo de viaje'
         },
-        
       };
 
       const fieldConfig = fieldMap[selectedField];
@@ -316,7 +306,6 @@ const ProfileScreen = ({ navigation }) => {
         return;
       }
 
-      // 🔹 Actualizar en Auth si es necesario (para displayName)
       if (fieldConfig.authUpdate && selectedField === 'name') {
         try {
           await updateProfile(user, { displayName: editValue });
@@ -325,20 +314,17 @@ const ProfileScreen = ({ navigation }) => {
         }
       }
 
-      // 🔹 Actualizar en Firestore
       const updates = {};
       updates[fieldConfig.firestoreField] = editValue;
       updates.updatedAt = new Date();
 
       await updateDoc(doc(db, 'users', user.uid), updates);
 
-      // 🔹 Actualizar estado local inmediatamente
       setUserData(prev => ({
         ...prev,
         [selectedField]: editValue
       }));
 
-      // 🔹 Forzar recarga de datos para asegurar consistencia
       setTimeout(() => {
         loadUserData(true);
       }, 500);
@@ -347,6 +333,7 @@ const ProfileScreen = ({ navigation }) => {
       Alert.alert('✅ Guardado', 'Cambios actualizados correctamente');
 
       setEditModalVisible(false);
+      Keyboard.dismiss();
 
     } catch (error) {
       console.error('❌ Error guardando cambios:', error);
@@ -503,6 +490,7 @@ const ProfileScreen = ({ navigation }) => {
           contentContainerStyle={styles.scrollContent}
           bounces={true}
           overScrollMode="always"
+          keyboardShouldPersistTaps="handled"
         >
           <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
 
@@ -532,11 +520,10 @@ const ProfileScreen = ({ navigation }) => {
               </LinearGradient>
             </View>
 
-            {/* STATS GRID - DATOS REALES CORREGIDOS */}
+            {/* STATS GRID */}
             <View style={styles.statsSection}>
               <Text style={styles.sectionTitle}>Mis Estadísticas</Text>
               <View style={styles.statsGrid}>
-                {/* Viajes */}
                 <StatCard
                   icon="✈️"
                   value={stats.totalTrips}
@@ -544,24 +531,18 @@ const ProfileScreen = ({ navigation }) => {
                   color="#3B82F6"
                   subLabel={`${stats.tripsCompleted} completados`}
                 />
-
-                {/* Cajas (de mudanzas) */}
                 <StatCard
                   icon="📦"
                   value={stats.totalBoxes}
                   label="Cajas"
                   color="#10B981"
                 />
-
-                {/* Maletas (de viajes) */}
                 <StatCard
                   icon="🛄"
                   value={stats.totalLuggage}
                   label="Maletas"
                   color="#8B5CF6"
                 />
-
-                {/* Mudanzas */}
                 <StatCard
                   icon="🏠"
                   value={stats.totalMoves}
@@ -569,16 +550,12 @@ const ProfileScreen = ({ navigation }) => {
                   color="#F59E0B"
                   subLabel={`${stats.movesActive} activas`}
                 />
-
-                {/* Peso Total */}
                 <StatCard
                   icon="⚖️"
                   value={`${stats.totalWeight}kg`}
                   label="Peso Total"
                   color="#EF4444"
                 />
-
-                {/* Países */}
                 <StatCard
                   icon="🌎"
                   value={stats.countriesVisited}
@@ -631,7 +608,6 @@ const ProfileScreen = ({ navigation }) => {
                   editable={editing}
                   fieldName="travelStyle"
                 />
-               
               </View>
             </View>
 
@@ -655,78 +631,103 @@ const ProfileScreen = ({ navigation }) => {
               <Text style={styles.footerText}>
                 Cuenta verificada • Última actualización: Hoy
               </Text>
-              <Text style={styles.versionText}>Versión 2.5.1 • TravelTech Labs</Text>
+              <Text style={styles.versionText}>Versión 2.5.1 • NextApp Labs</Text>
             </View>
           </Animated.View>
         </ScrollView>
 
-        {/* MODAL PARA EDITAR */}
+        {/* MODAL PARA EDITAR CON LA MISMA LÓGICA QUE LOGINSCREEN */}
         <Modal
           animationType="slide"
           transparent={true}
           visible={editModalVisible}
-          onRequestClose={() => setEditModalVisible(false)}
+          onRequestClose={() => {
+            setEditModalVisible(false);
+            Keyboard.dismiss();
+          }}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContent}>
-              <LinearGradient
-                colors={['#1E293B', '#0F172A']}
-                style={styles.modalGradient}
-              >
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>
-                    {selectedField === 'name' ? 'Editar Nombre' :
-                      selectedField === 'bio' ? 'Editar Bio' :
-                        selectedField === 'travelStyle' ? 'Editar Estilo de Viaje' :
-                          'Editar Aerolínea Preferida'}
-                  </Text>
-                  <TouchableOpacity
-                    onPress={() => setEditModalVisible(false)}
-                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-                  >
-                    <Ionicons name="close" size={28} color="#FFFFFF" />
-                  </TouchableOpacity>
-                </View>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardAvoiding}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.modalOverlay}>
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <View style={styles.modalContainer}>
+                    <View style={styles.modalHeader}>
+                      <Text style={styles.modalTitle}>
+                        {selectedField === 'name' ? 'Editar Nombre' :
+                          selectedField === 'bio' ? 'Editar Bio' :
+                            selectedField === 'travelStyle' ? 'Editar Estilo de Viaje' :
+                              'Editar Aerolínea Preferida'}
+                      </Text>
+                      <TouchableOpacity
+                        onPress={() => {
+                          setEditModalVisible(false);
+                          Keyboard.dismiss();
+                        }}
+                        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                      >
+                        <Ionicons name="close" size={28} color="#FFFFFF" />
+                      </TouchableOpacity>
+                    </View>
 
-                <TextInput
-                  style={[
-                    styles.modalInput,
-                    selectedField === 'bio' && styles.modalInputMultiline
-                  ]}
-                  value={editValue}
-                  onChangeText={setEditValue}
-                  multiline={selectedField === 'bio'}
-                  numberOfLines={selectedField === 'bio' ? 4 : 1}
-                  placeholder={`Ingresa tu ${selectedField === 'name' ? 'nombre' : selectedField === 'bio' ? 'descripción personal' : selectedField}`}
-                  placeholderTextColor="#94A3B8"
-                  autoFocus
-                  autoCapitalize={selectedField === 'name' ? 'words' : 'sentences'}
-                />
-
-                <View style={styles.modalButtons}>
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.cancelButton]}
-                    onPress={() => setEditModalVisible(false)}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancelar</Text>
-                  </TouchableOpacity>
-
-                  <TouchableOpacity
-                    style={[styles.modalButton, styles.saveButton]}
-                    onPress={saveField}
-                  >
-                    <LinearGradient
-                      colors={['#3B82F6', '#1D4ED8']}
-                      style={styles.saveButtonGradient}
+                    <ScrollView
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={styles.modalScrollContent}
+                      keyboardShouldPersistTaps="handled"
+                      bounces={false}
                     >
-                      <Ionicons name="checkmark" size={20} color="#FFFFFF" />
-                      <Text style={styles.saveButtonText}>Guardar</Text>
-                    </LinearGradient>
-                  </TouchableOpacity>
-                </View>
-              </LinearGradient>
-            </View>
-          </View>
+                      <TextInput
+                        ref={modalInputRef}
+                        style={[
+                          styles.modalInput,
+                          selectedField === 'bio' && styles.modalInputMultiline
+                        ]}
+                        value={editValue}
+                        onChangeText={setEditValue}
+                        multiline={selectedField === 'bio'}
+                        numberOfLines={selectedField === 'bio' ? 4 : 1}
+                        placeholder={`Ingresa tu ${selectedField === 'name' ? 'nombre' : selectedField === 'bio' ? 'descripción personal' : selectedField}`}
+                        placeholderTextColor="#94A3B8"
+                        autoFocus
+                        autoCapitalize={selectedField === 'name' ? 'words' : 'sentences'}
+                        returnKeyType="done"
+                        blurOnSubmit={true}
+                        onSubmitEditing={saveField}
+                      />
+
+                      <View style={styles.modalButtons}>
+                        <TouchableOpacity
+                          style={[styles.modalButton, styles.cancelButton]}
+                          onPress={() => {
+                            setEditModalVisible(false);
+                            Keyboard.dismiss();
+                          }}
+                        >
+                          <Text style={styles.cancelButtonText}>Cancelar</Text>
+                        </TouchableOpacity>
+
+                        <TouchableOpacity
+                          style={[styles.modalButton, styles.saveButton]}
+                          onPress={saveField}
+                        >
+                          <LinearGradient
+                            colors={['#3B82F6', '#1D4ED8']}
+                            style={styles.saveButtonGradient}
+                          >
+                            <Ionicons name="checkmark" size={20} color="#FFFFFF" />
+                            <Text style={styles.saveButtonText}>Guardar</Text>
+                          </LinearGradient>
+                        </TouchableOpacity>
+                      </View>
+                    </ScrollView>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
         </Modal>
       </LinearGradient>
     </SafeAreaView>
@@ -1051,19 +1052,27 @@ const styles = StyleSheet.create({
     color: '#64748B',
     textAlign: 'center',
   },
-  modalOverlay: {
+  // ESTILOS MODAL - MISMA CONFIGURACIÓN QUE LOGINSCREEN
+  modalKeyboardAvoiding: {
     flex: 1,
     backgroundColor: 'rgba(0, 0, 0, 0.7)',
     justifyContent: 'flex-end',
   },
-  modalContent: {
-    borderTopLeftRadius: 32,
-    borderTopRightRadius: 32,
-    overflow: 'hidden',
-    maxHeight: height * 0.5,
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'flex-end',
   },
-  modalGradient: {
-    padding: 24,
+  modalContainer: {
+    backgroundColor: '#1E293B',
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    width: '100%',
+    maxHeight: '90%',
+    padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 40,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
   },
   modalHeader: {
     flexDirection: 'row',
@@ -1086,15 +1095,17 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     minHeight: 50,
+    marginBottom: 20,
   },
   modalInputMultiline: {
-    minHeight: 100,
+    minHeight: 120,
     textAlignVertical: 'top',
+    maxHeight: 200,
   },
   modalButtons: {
     flexDirection: 'row',
     gap: 12,
-    marginTop: 20,
+    marginBottom: 20,
   },
   modalButton: {
     flex: 1,

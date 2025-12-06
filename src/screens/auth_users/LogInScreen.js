@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
-  BackHandler, // ✅ AÑADIR ESTO
+  BackHandler,
   KeyboardAvoidingView,
   Platform,
   ScrollView,

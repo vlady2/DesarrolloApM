@@ -11,11 +11,14 @@ import {
   updatePassword,
 } from 'firebase/auth';
 import { deleteDoc, doc, updateDoc } from 'firebase/firestore';
-import { useEffect, useState } from 'react'; // Añade useEffect
+import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Keyboard,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   SafeAreaView,
   ScrollView,
   StatusBar,
@@ -23,6 +26,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -31,9 +35,8 @@ import { app } from '../../firebase/config';
 
 const PrivacyScreen = ({ navigation }) => {
   const auth = getAuth(app);
-  const [user, setUser] = useState(auth.currentUser); // Estado para el usuario
+  const [user, setUser] = useState(auth.currentUser);
   
-
   const [modalVisible, setModalVisible] = useState(false);
   const [loading, setLoading] = useState(false);
   const [activeModal, setActiveModal] = useState('');
@@ -69,7 +72,6 @@ const PrivacyScreen = ({ navigation }) => {
           description: 'Actualiza tu contraseña de acceso',
           action: () => openModal('password')
         },
-        
       ]
     }
   ];
@@ -159,170 +161,153 @@ const PrivacyScreen = ({ navigation }) => {
   };
 
   const handleChangeEmail = async () => {
-  if (!newEmail || !confirmEmail || !passwordForEmailChange) {
-    Alert.alert('Error', 'Por favor completa todos los campos');
-    return;
-  }
-
-  if (newEmail !== confirmEmail) {
-    Alert.alert('Error', 'Los correos no coinciden');
-    return;
-  }
-
-  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-  if (!emailRegex.test(newEmail)) {
-    Alert.alert('Error', 'Ingresa un correo electrónico válido');
-    return;
-  }
-
-  setLoading(true);
-  try {
-    // 1. Reautenticar al usuario
-    const user = await reauthenticateUser(passwordForEmailChange);
-    
-    // 2. Verificar que el email actual esté verificado
-    if (!user.emailVerified) {
-      Alert.alert(
-        'Email no verificado',
-        'Tu email actual no está verificado. ¿Deseas continuar de todos modos?',
-        [
-          { text: 'Cancelar', style: 'cancel', onPress: () => setLoading(false) },
-          { 
-            text: 'Continuar', 
-            onPress: async () => {
-              await performEmailUpdate(user, newEmail);
-            }
-          }
-        ]
-      );
+    if (!newEmail || !confirmEmail || !passwordForEmailChange) {
+      Alert.alert('Error', 'Por favor completa todos los campos');
       return;
     }
-    
-    // 3. Si el email está verificado, continuar directamente
-    await performEmailUpdate(user, newEmail);
-    
-  } catch (error) {
-    console.error('Error cambiando email:', error);
-    handleEmailError(error);
-  } finally {
-    setLoading(false);
-  }
-};
 
-// Función auxiliar para actualizar el email
-const performEmailUpdate = async (user, newEmail) => {
-  try {
-    // IMPORTANTE: Primero actualizar en Firestore (si es necesario)
-    // Luego intentar actualizar en Authentication
-    
-    // Opción A: Intentar updateEmail directamente
+    if (newEmail !== confirmEmail) {
+      Alert.alert('Error', 'Los correos no coinciden');
+      return;
+    }
+
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(newEmail)) {
+      Alert.alert('Error', 'Ingresa un correo electrónico válido');
+      return;
+    }
+
+    setLoading(true);
     try {
-      await updateEmail(user, newEmail);
-      console.log('✅ Email actualizado en Authentication');
-    } catch (authError) {
-      console.log('Error en updateEmail, intentando alternativa:', authError);
+      const user = await reauthenticateUser(passwordForEmailChange);
       
-      // Opción B: Método alternativo - Crear nuevo usuario o usar Firebase Functions
-      // Para desarrollo, puedes usar esta alternativa temporal
+      if (!user.emailVerified) {
+        Alert.alert(
+          'Email no verificado',
+          'Tu email actual no está verificado. ¿Deseas continuar de todos modos?',
+          [
+            { text: 'Cancelar', style: 'cancel', onPress: () => setLoading(false) },
+            { 
+              text: 'Continuar', 
+              onPress: async () => {
+                await performEmailUpdate(user, newEmail);
+              }
+            }
+          ]
+        );
+        return;
+      }
+      
+      await performEmailUpdate(user, newEmail);
+      
+    } catch (error) {
+      console.error('Error cambiando email:', error);
+      handleEmailError(error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const performEmailUpdate = async (user, newEmail) => {
+    try {
+      try {
+        await updateEmail(user, newEmail);
+        console.log('✅ Email actualizado en Authentication');
+      } catch (authError) {
+        console.log('Error en updateEmail, intentando alternativa:', authError);
+        
+        Alert.alert(
+          'Advertencia',
+          'No se pudo cambiar el email automáticamente. ' +
+          'Para completar el cambio, contacta con soporte o usa la opción de restablecer contraseña con el nuevo email.',
+          [
+            {
+              text: 'OK',
+              onPress: () => {
+                setModalVisible(false);
+                setNewEmail('');
+                setConfirmEmail('');
+                setPasswordForEmailChange('');
+              }
+            }
+          ]
+        );
+        return;
+      }
+      
+      try {
+        const userDocRef = doc(db, 'users', user.uid);
+        await updateDoc(userDocRef, {
+          email: newEmail,
+          updatedAt: new Date().toISOString(),
+          emailVerified: false,
+        });
+        console.log('✅ Email actualizado en Firestore');
+      } catch (firestoreError) {
+        console.error('Error actualizando email en Firestore:', firestoreError);
+      }
+      
+      await sendEmailVerification(user);
+      
       Alert.alert(
-        'Advertencia',
-        'No se pudo cambiar el email automáticamente. ' +
-        'Para completar el cambio, contacta con soporte o usa la opción de restablecer contraseña con el nuevo email.',
+        '✅ Cambio solicitado',
+        'Hemos procesado tu solicitud de cambio de email.\n\n' +
+        'Se ha enviado un email de verificación a tu nueva dirección.\n\n' +
+        'Debes verificar el nuevo correo para completar el proceso.',
         [
           {
             text: 'OK',
-            onPress: () => {
-              setModalVisible(false);
-              setNewEmail('');
-              setConfirmEmail('');
-              setPasswordForEmailChange('');
+            onPress: async () => {
+              try {
+                await signOut(auth);
+                
+                setModalVisible(false);
+                setNewEmail('');
+                setConfirmEmail('');
+                setPasswordForEmailChange('');
+                
+                navigation.reset({
+                  index: 0,
+                  routes: [{ name: 'Login' }],
+                });
+              } catch (logoutError) {
+                console.error('Error cerrando sesión:', logoutError);
+                navigation.replace('Login');
+              }
             }
           }
         ]
       );
-      return;
+      
+    } catch (error) {
+      console.error('Error en performEmailUpdate:', error);
+      throw error;
     }
-    
-    // Actualizar en Firestore
-    try {
-      const userDocRef = doc(db, 'users', user.uid);
-      await updateDoc(userDocRef, {
-        email: newEmail,
-        updatedAt: new Date().toISOString(),
-        emailVerified: false, // Resetear verificación
-      });
-      console.log('✅ Email actualizado en Firestore');
-    } catch (firestoreError) {
-      console.error('Error actualizando email en Firestore:', firestoreError);
-    }
-    
-    // Enviar email de verificación al nuevo correo
-    await sendEmailVerification(user);
-    
-    // Mostrar éxito
-    Alert.alert(
-      '✅ Cambio solicitado',
-      'Hemos procesado tu solicitud de cambio de email.\n\n' +
-      'Se ha enviado un email de verificación a tu nueva dirección.\n\n' +
-      'Debes verificar el nuevo correo para completar el proceso.',
-      [
-        {
-          text: 'OK',
-          onPress: async () => {
-            try {
-              // Cerrar sesión
-              await signOut(auth);
-              
-              // Limpiar estados
-              setModalVisible(false);
-              setNewEmail('');
-              setConfirmEmail('');
-              setPasswordForEmailChange('');
-              
-              // Navegar al login
-              navigation.reset({
-                index: 0,
-                routes: [{ name: 'Login' }],
-              });
-            } catch (logoutError) {
-              console.error('Error cerrando sesión:', logoutError);
-              navigation.replace('Login');
-            }
-          }
-        }
-      ]
-    );
-    
-  } catch (error) {
-    console.error('Error en performEmailUpdate:', error);
-    throw error;
-  }
-};
+  };
 
-// Función para manejar errores
-const handleEmailError = (error) => {
-  let errorMessage = 'No se pudo cambiar el correo electrónico';
-  
-  switch (error.code) {
-    case 'auth/wrong-password':
-      errorMessage = 'La contraseña es incorrecta';
-      break;
-    case 'auth/email-already-in-use':
-      errorMessage = 'Este correo ya está en uso por otra cuenta';
-      break;
-    case 'auth/invalid-email':
-      errorMessage = 'El correo electrónico no es válido';
-      break;
-    case 'auth/requires-recent-login':
-      errorMessage = 'Debes iniciar sesión nuevamente para realizar esta acción';
-      break;
-    case 'auth/operation-not-allowed':
-      errorMessage = 'No se puede cambiar el email automáticamente. Contacta con soporte.';
-      break;
-  }
-  
-  Alert.alert('Error', errorMessage);
-};
+  const handleEmailError = (error) => {
+    let errorMessage = 'No se pudo cambiar el correo electrónico';
+    
+    switch (error.code) {
+      case 'auth/wrong-password':
+        errorMessage = 'La contraseña es incorrecta';
+        break;
+      case 'auth/email-already-in-use':
+        errorMessage = 'Este correo ya está en uso por otra cuenta';
+        break;
+      case 'auth/invalid-email':
+        errorMessage = 'El correo electrónico no es válido';
+        break;
+      case 'auth/requires-recent-login':
+        errorMessage = 'Debes iniciar sesión nuevamente para realizar esta acción';
+        break;
+      case 'auth/operation-not-allowed':
+        errorMessage = 'No se puede cambiar el email automáticamente. Contacta con soporte.';
+        break;
+    }
+    
+    Alert.alert('Error', errorMessage);
+  };
 
   const handleDeleteAccount = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
@@ -401,6 +386,8 @@ const handleEmailError = (error) => {
               placeholder="Ingresa tu contraseña actual"
               placeholderTextColor="#64748B"
               editable={!loading}
+              returnKeyType="next"
+              blurOnSubmit={false}
             />
           </View>
 
@@ -414,6 +401,8 @@ const handleEmailError = (error) => {
               placeholder="Mínimo 6 caracteres"
               placeholderTextColor="#64748B"
               editable={!loading}
+              returnKeyType="next"
+              blurOnSubmit={false}
             />
           </View>
 
@@ -427,6 +416,8 @@ const handleEmailError = (error) => {
               placeholder="Repite la nueva contraseña"
               placeholderTextColor="#64748B"
               editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={handleChangePassword}
             />
           </View>
 
@@ -448,8 +439,6 @@ const handleEmailError = (error) => {
     if (activeModal === 'email') {
       return (
         <>
-          
-          
           {!user?.emailVerified && (
             <View style={styles.warningContainer}>
               <Ionicons name="warning-outline" size={20} color="#F59E0B" />
@@ -469,6 +458,8 @@ const handleEmailError = (error) => {
               placeholder="Para confirmar tu identidad"
               placeholderTextColor="#64748B"
               editable={!loading}
+              returnKeyType="next"
+              blurOnSubmit={false}
             />
           </View>
 
@@ -483,6 +474,8 @@ const handleEmailError = (error) => {
               placeholder="nuevo@correo.com"
               placeholderTextColor="#64748B"
               editable={!loading}
+              returnKeyType="next"
+              blurOnSubmit={false}
             />
           </View>
 
@@ -497,6 +490,8 @@ const handleEmailError = (error) => {
               placeholder="nuevo@correo.com"
               placeholderTextColor="#64748B"
               editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={user?.emailVerified ? handleChangeEmail : null}
             />
           </View>
 
@@ -578,6 +573,12 @@ const handleEmailError = (error) => {
               placeholder="Ingresa tu contraseña para confirmar"
               placeholderTextColor="#64748B"
               editable={!loading}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                if (currentPassword && !loading) {
+                  // Lógica de eliminación de cuenta
+                }
+              }}
             />
           </View>
 
@@ -600,24 +601,19 @@ const handleEmailError = (error) => {
                   return;
                 }
 
-                // 1. Reautenticar
                 const credential = EmailAuthProvider.credential(user.email, password);
                 await reauthenticateWithCredential(user, credential);
                 
-                // 2. Obtener datos del usuario
                 const userId = user.uid;
                 
-                // 3. PRIMERO eliminar el documento de Firestore completamente
                 try {
                   const userDocRef = doc(db, 'users', userId);
-                  await deleteDoc(userDocRef); // ELIMINAR PERMANENTEMENTE
+                  await deleteDoc(userDocRef);
                   console.log('✅ Usuario eliminado permanentemente de Firestore');
                 } catch (firestoreError) {
                   console.error('Error eliminando usuario de Firestore:', firestoreError);
-                  // Continuar aunque falle Firestore para eliminar de Authentication
                 }
                 
-                // 4. Eliminar de Authentication
                 await deleteUser(user);
                 
                 Alert.alert(
@@ -633,7 +629,6 @@ const handleEmailError = (error) => {
                           console.error('Error en signOut:', e);
                         }
                         
-                        // Navegar al inicio usando reset para limpiar pila
                         navigation.reset({
                           index: 0,
                           routes: [{ name: 'Login' }],
@@ -696,7 +691,11 @@ const handleEmailError = (error) => {
           {loading && <ActivityIndicator size="small" color="#3B82F6" style={styles.headerLoader} />}
         </View>
 
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          style={styles.scrollView} 
+          showsVerticalScrollIndicator={false}
+          keyboardShouldPersistTaps="handled"
+        >
           <View style={styles.contentContainer}>
 
             {/* Indicador de verificación de email */}
@@ -774,27 +773,49 @@ const handleEmailError = (error) => {
           </View>
         </ScrollView>
 
-        {/* MODAL PARA CAMBIOS */}
+        {/* MODAL PARA CAMBIOS - USANDO LA MISMA LÓGICA QUE LOGINSCREEN */}
         <Modal
           animationType="slide"
           transparent={true}
           visible={modalVisible}
           onRequestClose={() => !loading && setModalVisible(false)}
         >
-          <View style={styles.modalOverlay}>
-            <View style={styles.modalContainer}>
-              <View style={styles.modalHeader}>
-                <TouchableOpacity
-                  onPress={() => !loading && setModalVisible(false)}
-                  disabled={loading}
-                >
-                  <Ionicons name="close" size={24} color={loading ? "#64748B" : "#FFFFFF"} />
-                </TouchableOpacity>
-              </View>
+          <KeyboardAvoidingView
+            style={styles.modalKeyboardAvoiding}
+            behavior={Platform.OS === 'ios' ? 'padding' : 'padding'} // CAMBIADO: 'padding' para ambos
+            keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0} // CAMBIADO: 0 para ambos
+          >
+            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+              <View style={styles.modalOverlay}>
+                <TouchableWithoutFeedback onPress={() => {}}>
+                  <View style={styles.modalContainer}>
+                    <View style={styles.modalHeader}>
+                      <TouchableOpacity
+                        onPress={() => {
+                          if (!loading) {
+                            setModalVisible(false);
+                            Keyboard.dismiss();
+                          }
+                        }}
+                        disabled={loading}
+                      >
+                        <Ionicons name="close" size={24} color={loading ? "#64748B" : "#FFFFFF"} />
+                      </TouchableOpacity>
+                    </View>
 
-              {renderModalContent()}
-            </View>
-          </View>
+                    <ScrollView
+                      showsVerticalScrollIndicator={false}
+                      contentContainerStyle={styles.modalScrollContent}
+                      keyboardShouldPersistTaps="handled"
+                      bounces={false}
+                    >
+                      {renderModalContent()}
+                    </ScrollView>
+                  </View>
+                </TouchableWithoutFeedback>
+              </View>
+            </TouchableWithoutFeedback>
+          </KeyboardAvoidingView>
         </Modal>
       </LinearGradient>
     </SafeAreaView>
@@ -813,7 +834,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 16,
+    paddingTop: Platform.OS === 'ios' ? 50 : 30,
+    paddingBottom: 16,
     borderBottomWidth: 1,
     borderBottomColor: 'rgba(255, 255, 255, 0.1)',
   },
@@ -835,8 +857,8 @@ const styles = StyleSheet.create({
   },
   contentContainer: {
     padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 40,
   },
-  // Estilos para alerta de verificación
   verificationAlert: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -879,7 +901,6 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontStyle: 'italic',
   },
-  // Estilos existentes
   section: {
     marginBottom: 24,
   },
@@ -981,19 +1002,27 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontStyle: 'italic',
   },
+  // ESTILOS PARA EL MODAL - AJUSTADOS COMO EN LOGINSCREEN
+  modalKeyboardAvoiding: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
   modalOverlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
+    justifyContent: 'flex-end',
   },
   modalContainer: {
     backgroundColor: '#1E293B',
-    borderRadius: 20,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
     width: '100%',
-    maxHeight: '80%',
+    maxHeight: '90%',
     padding: 20,
+    paddingBottom: Platform.OS === 'ios' ? 30 : 40,
+  },
+  modalScrollContent: {
+    flexGrow: 1,
   },
   modalHeader: {
     flexDirection: 'row',

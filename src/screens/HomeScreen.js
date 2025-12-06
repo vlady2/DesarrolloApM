@@ -1,8 +1,10 @@
 import { signOut } from 'firebase/auth';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Alert,
   BackHandler,
+  RefreshControl,
+  ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -15,39 +17,57 @@ import { auth } from '../../firebase/auth';
 const HomeScreen = ({ navigation }) => {
   const [userName, setUserName] = useState('Usuario');
   const [userEmail, setUserEmail] = useState('');
+  const [refreshing, setRefreshing] = useState(false);
 
-  // ✅ Obtener información del usuario al cargar
-  useEffect(() => {
+  // ✅ Función para cargar datos del usuario
+  const loadUserData = useCallback(() => {
     const user = auth.currentUser;
     if (user) {
-      // Intentar usar displayName, si no existe usar email
       const name = user.displayName || user.email?.split('@')[0] || 'Usuario';
       setUserName(name);
       setUserEmail(user.email || '');
-      
-      console.log('🏠 HomeScreen cargado para:', user.email);
+      console.log('🏠 Datos del usuario cargados:', user.email);
     }
   }, []);
 
-  // ✅ CORREGIDO: Manejar el botón físico de back en HomeScreen
-  // ✅ CORREGIDO: Manejar el botón físico de back en HomeScreen
-useEffect(() => {
-  const backAction = () => {
-    // En HomeScreen, el back físico debe cerrar sesión con confirmación
-    if (navigation.isFocused()) {
-      handleLogout(); // Esto ya usa replace('Login')
-      return true; // Prevenir el comportamiento por defecto
-    }
-    return false;
-  };
+  // ✅ Cargar datos inicialmente
+  useEffect(() => {
+    loadUserData();
+  }, [loadUserData]);
 
-  const backHandler = BackHandler.addEventListener(
-    'hardwareBackPress',
-    backAction
-  );
+  // ✅ Función de pull-to-refresh
+  const onRefresh = useCallback(() => {
+    setRefreshing(true);
+    
+    // Simular un tiempo de carga (puedes ajustar esto)
+    setTimeout(() => {
+      // Recargar datos del usuario
+      loadUserData();
+      
+      // También puedes agregar aquí otras funciones para recargar datos
+      console.log('🔄 Página recargada mediante pull-to-refresh');
+      
+      setRefreshing(false);
+    }, 1500); // 1.5 segundos de delay para ver la animación
+  }, [loadUserData]);
 
-  return () => backHandler.remove();
-}, [navigation, handleLogout]);
+  // ✅ CORREGIDO: Manejar el botón físico de back en HomeScreen
+  useEffect(() => {
+    const backAction = () => {
+      if (navigation.isFocused()) {
+        handleLogout();
+        return true;
+      }
+      return false;
+    };
+
+    const backHandler = BackHandler.addEventListener(
+      'hardwareBackPress',
+      backAction
+    );
+
+    return () => backHandler.remove();
+  }, [navigation]);
 
   // Definir los colores originales de cada botón
   const menuItems = [
@@ -78,39 +98,36 @@ useEffect(() => {
   ];
 
   // Función para cerrar sesión
-  // En tu HomeScreen.js, en la función handleLogout
-const handleLogout = () => {
-  Alert.alert(
-    'Cerrar Sesión',
-    '¿Estás seguro de que quieres cerrar sesión?',
-    [
-      {
-        text: 'Cancelar',
-        style: 'cancel'
-      },
-      {
-        text: 'Cerrar Sesión',
-        style: 'destructive',
-        onPress: async () => {
-          try {
-            console.log('🔒 Cerrando sesión...');
-            await signOut(auth);
-            // ✅ CORREGIDO: Usar replace en lugar de reset
-            navigation.replace('Login');
-            console.log('✅ Sesión cerrada exitosamente');
-          } catch (error) {
-            console.error('❌ Error al cerrar sesión:', error);
-            Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
+  const handleLogout = () => {
+    Alert.alert(
+      'Cerrar Sesión',
+      '¿Estás seguro de que quieres cerrar sesión?',
+      [
+        {
+          text: 'Cancelar',
+          style: 'cancel'
+        },
+        {
+          text: 'Cerrar Sesión',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              console.log('🔒 Cerrando sesión...');
+              await signOut(auth);
+              navigation.replace('Login');
+              console.log('✅ Sesión cerrada exitosamente');
+            } catch (error) {
+              console.error('❌ Error al cerrar sesión:', error);
+              Alert.alert('Error', 'No se pudo cerrar sesión. Intenta de nuevo.');
+            }
           }
         }
-      }
-    ]
-  );
-};
+      ]
+    );
+  };
 
   // ✅ CORREGIDO: Navegación con origen
   const handleNew = () => {
-    // Mostrar opción para elegir entre Viaje o Mudanza
     Alert.alert(
       'Nuevo Movimiento',
       '¿Qué deseas crear?',
@@ -118,14 +135,14 @@ const handleLogout = () => {
         {
           text: 'Viaje',
           onPress: () => navigation.navigate('NewTrip', { 
-            origin: 'Home' // 👈 PASAR ORIGEN A NEWTRIP
+            origin: 'Home'
           })
         },
         {
           text: 'Mudanza',
           onPress: () => navigation.navigate('NewMove', {
-            origin: 'Home' // 👈 PASAR ORIGEN A NEWMOVE
-        })
+            origin: 'Home'
+          })
         },
         {
           text: 'Cancelar',
@@ -145,6 +162,10 @@ const handleLogout = () => {
           </Text>
           <Text style={styles.welcomeText}>
             ¿Qué deseas hacer hoy?
+          </Text>
+          {/* Indicador de última actualización */}
+          <Text style={styles.lastUpdateText}>
+            Última actualización: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
           </Text>
         </View>
         
@@ -172,29 +193,49 @@ const handleLogout = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {renderHeader()}
-      
-      {/* Botón NUEVO Grande */}
-      <TouchableOpacity style={styles.newButton} onPress={handleNew}>
-        <Ionicons name="add-circle" size={40} color="#FFFFFF" />
-        <Text style={styles.newButtonText}>NUEVO</Text>
-      </TouchableOpacity>
-
-      {/* Grid de botones */}
-      <View style={styles.menuGrid}>
-        {/* Fila 1 */}
-        <View style={styles.menuRow}>
-          {renderMenuItem(menuItems[0], 0)}
-          {renderMenuItem(menuItems[1], 1)}
-        </View>
-
-        {/* Fila 2 */}
-        <View style={styles.menuRow}>
-          {renderMenuItem(menuItems[2], 2)}
-          {renderMenuItem(menuItems[3], 3)}
-        </View>
+      <ScrollView
+        contentContainerStyle={styles.scrollContainer}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            // Personalización del RefreshControl
+            colors={['#BB86FC', '#03DAC5', '#FF0266']} // Colores del spinner (Android)
+            tintColor="#BB86FC" // Color del spinner (iOS)
+            title="Jalando para recargar..."
+            titleColor="#888"
+          />
+        }
+        // Configuración para mejor experiencia de pull-to-refresh
+        showsVerticalScrollIndicator={true}
+        scrollEventThrottle={16}
+      >
+        {renderHeader()}
         
-      </View>
+        {/* Botón NUEVO Grande */}
+        <TouchableOpacity style={styles.newButton} onPress={handleNew}>
+          <Ionicons name="add-circle" size={40} color="#FFFFFF" />
+          <Text style={styles.newButtonText}>NUEVO</Text>
+        </TouchableOpacity>
+
+        {/* Grid de botones */}
+        <View style={styles.menuGrid}>
+          {/* Fila 1 */}
+          <View style={styles.menuRow}>
+            {renderMenuItem(menuItems[0], 0)}
+            {renderMenuItem(menuItems[1], 1)}
+          </View>
+
+          {/* Fila 2 */}
+          <View style={styles.menuRow}>
+            {renderMenuItem(menuItems[2], 2)}
+            {renderMenuItem(menuItems[3], 3)}
+          </View>
+        </View>
+
+        {/* Espacio adicional para mejor scroll */}
+        <View style={styles.bottomSpacer} />
+      </ScrollView>
     </SafeAreaView>
   );
 };
@@ -203,6 +244,9 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: '#121212',
+  },
+  scrollContainer: {
+    flexGrow: 1,
     padding: 20,
   },
   header: {
@@ -219,20 +263,21 @@ const styles = StyleSheet.create({
     marginRight: 15,
   },
   greeting: {
-    fontSize: 24, // Reducido de 28
+    fontSize: 24,
     fontWeight: 'bold',
     color: '#FFFFFF',
     marginBottom: 4,
-  },
-  subtitle: {
-    fontSize: 14, // Reducido de 16
-    color: '#BB86FC',
-    marginBottom: 8,
   },
   welcomeText: {
     fontSize: 14,
     color: '#888',
     marginTop: 4,
+  },
+  lastUpdateText: {
+    fontSize: 12,
+    color: '#555',
+    marginTop: 8,
+    fontStyle: 'italic',
   },
   logoutButton: {
     padding: 10,
@@ -285,6 +330,9 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginTop: 10,
     textAlign: 'center',
+  },
+  bottomSpacer: {
+    height: 50,
   },
 });
 

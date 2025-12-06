@@ -5,6 +5,7 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  KeyboardAvoidingView,
   Modal,
   ScrollView,
   StatusBar,
@@ -649,12 +650,20 @@ IMPORTANTE: Responde SOLO con los 10 artículos separados por comas, sin texto a
   };
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+      behavior="padding"
+      keyboardVerticalOffset={0}
+    >
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
       
       {renderHeader()}
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {forceBoxes && (
           <View style={styles.requiredSection}>
             <Ionicons name="warning" size={16} color="#FFA500" />
@@ -998,7 +1007,7 @@ IMPORTANTE: Responde SOLO con los 10 artículos separados por comas, sin texto a
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
@@ -1034,6 +1043,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
   },
   requiredSection: {
     flexDirection: 'row',
