@@ -1,19 +1,19 @@
 // NewBoxScreen.js
 import { GROQ_API_KEY } from '@env';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    BackHandler,
-    Modal,
-    ScrollView,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    TouchableWithoutFeedback,
-    View
+  ActivityIndicator,
+  Alert,
+  BackHandler,
+  Modal,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -40,27 +40,54 @@ const HABITACIONES = [
   { id: 'other', nombre: 'Otra Habitación', icon: 'ellipsis-horizontal' }
 ];
 
-// Artículos problemáticos para mudanza
-const ARTICULOS_PROBLEMATICOS = [
-  'Productos químicos (limpieza, pinturas)',
-  'Alimentos perecederos',
-  'Plantas y tierra',
-  'Objetos de valor (joyas, dinero)',
-  'Medicamentos refrigerados',
-  'Electrónicos sensibles',
-  'Líquidos sin sellar',
-  'Baterías sueltas'
+// Artículos problemáticos para mudanza - UNIVERSALES
+const ARTICULOS_PROBLEMATICOS_UNIVERSALES = [
+  'Productos químicos (limpieza, pinturas, solventes)',
+  'Alimentos perecederos sin refrigeración',
+  'Plantas vivas y tierra/abono',
+  'Objetos de valor extremo (joyas, efectivo, documentos irreemplazables)',
+  'Medicamentos refrigerados (insulina, vacunas)',
+  'Electrónicos sensibles a temperatura extrema',
+  'Líquidos inflamables o corrosivos',
+  'Baterías de litio sueltas o dañadas',
+  'Productos en aerosol bajo presión',
+  'Objetos pesados (>25kg) en cajas pequeñas'
 ];
 
-// Sugerencias por tipo de habitación
-const SUGERENCIAS_POR_HABITACION = {
-  'kitchen': ['Utensilios de cocina', 'Vajilla y cristalería', 'Electrodomésticos pequeños', 'Alimentos no perecederos', 'Tablas de cortar'],
-  'living': ['Decoraciones', 'Libros', 'Electrónicos', 'Alfombras', 'Muebles pequeños'],
-  'bedroom': ['Ropa', 'Ropa de cama', 'Accesorios personales', 'Joyería', 'Cosméticos'],
-  'bathroom': ['Productos de higiene', 'Toallas', 'Botiquín', 'Accesorios de baño', 'Espejos'],
-  'office': ['Documentos importantes', 'Material de oficina', 'Libros', 'Electrónicos', 'Archivos'],
-  'garage': ['Herramientas', 'Equipo deportivo', 'Artículos de jardín', 'Bicicletas', 'Cajas de almacenamiento'],
-  'other': ['Artículos varios', 'Decoraciones', 'Objetos personales', 'Regalos', 'Recuerdos']
+// Restricciones por país para mudanzas internacionales
+const RESTRICCIONES_POR_PAIS_MUDANZA = {
+  'australia': {
+    problemas: ['Cualquier objeto de madera sin tratamiento', 'Equipos deportivos usados con tierra', 'Productos de miel y cera'],
+    recomendaciones: ['Fumigación obligatoria para muebles', 'Inspección aduanal detallada', 'Documentación fitosanitaria']
+  },
+  'nueva zelanda/nuevazelanda': {
+    problemas: ['Equipamiento de camping usado', 'Calzado con suela sucia', 'Herramientas de jardinería'],
+    recomendaciones: ['Limpieza profesional requerida', 'Certificado de no contaminación', 'Cuarentena posible']
+  },
+  'estados unidos/usa/ee.uu.': {
+    problemas: ['Productos agrícolas no certificados', 'Muebles de madera exótica', 'Productos de origen animal'],
+    recomendaciones: ['Formulario de aduana obligatorio', 'Valoración de bienes requerida', 'Seguro de transporte']
+  },
+  'canadá/canada': {
+    problemas: ['Armas o réplicas', 'Productos de tabaco sin declarar', 'Alimentos en grandes cantidades'],
+    recomendaciones: ['Lista detallada de contenido', 'Documentación de propiedad', 'Permiso de importación']
+  },
+  'reino unido/uk': {
+    problemas: ['Productos de origen animal de países no UE', 'Especies protegidas (CITES)', 'Antigüedades sin certificado'],
+    recomendaciones: ['IVA sobre valor de bienes', 'Documentación de procedencia', 'Inspección de aduanas']
+  },
+  'japón/japon': {
+    problemas: ['Medicamentos sin receta traducida', 'Productos con contenido adulto', 'Alimentos frescos'],
+    recomendaciones: ['Traducción jurada de documentos', 'Inventario muy detallado', 'Embajada/consulado']
+  },
+  'méxico/mexico': {
+    problemas: ['Electrónicos sin factura', 'Joyas en grandes cantidades', 'Antigüedades prehispánicas'],
+    recomendaciones: ['Facturas de compra', 'Permiso para antigüedades', 'Valoración oficial']
+  },
+  'españa/espana': {
+    problemas: ['Productos pirata o falsificados', 'Especies protegidas de flora/fauna', 'Armas incluso decorativas'],
+    recomendaciones: ['Documentación de la UE para ciudadanos', 'IVA de importación', 'Registro de bienes']
+  }
 };
 
 const NewBoxScreen = ({ route, navigation }) => {
@@ -76,6 +103,10 @@ const NewBoxScreen = ({ route, navigation }) => {
     moveIsToday = false
   } = route.params;
   
+  // Referencia para almacenar sugerencias por habitación
+  const sugerenciasPorHabitacionRef = useRef({});
+  const [aiButtonPressedPorHabitacion, setAiButtonPressedPorHabitacion] = useState({});
+
   const [caja, setCaja] = useState(
     mode === 'edit' && boxToEdit 
       ? {
@@ -111,6 +142,7 @@ const NewBoxScreen = ({ route, navigation }) => {
   const [showTipoModal, setShowTipoModal] = useState(false);
   const [showHabitacionModal, setShowHabitacionModal] = useState(false);
   const [hasSavedBox, setHasSavedBox] = useState(false);
+  const [restriccionesPais, setRestriccionesPais] = useState({ problemas: [], recomendaciones: [] });
 
   const insets = useSafeAreaInsets();
 
@@ -141,7 +173,205 @@ const NewBoxScreen = ({ route, navigation }) => {
     return () => backHandler.remove();
   }, [navigation, originScreen, forceBoxes, hasSavedBox]);
 
-  // Función de navegación que respeta el originScreen
+  // Cargar restricciones por país
+  useEffect(() => {
+    cargarRestriccionesPorPais();
+  }, [moveDestination]);
+
+  // Cargar sugerencias cuando cambia la habitación
+  useEffect(() => {
+    if (caja.habitacion && !isEditMode) {
+      cargarSugerenciasParaHabitacion();
+    }
+  }, [caja.habitacion, isEditMode]);
+
+  const cargarRestriccionesPorPais = () => {
+    if (!moveDestination) return;
+    
+    const destinoLower = moveDestination.toLowerCase();
+    let restriccionesEncontradas = { problemas: [], recomendaciones: [] };
+    
+    Object.keys(RESTRICCIONES_POR_PAIS_MUDANZA).forEach(paisKey => {
+      const paises = paisKey.split('/');
+      const tieneCoincidencia = paises.some(pais => destinoLower.includes(pais));
+      
+      if (tieneCoincidencia) {
+        const restricciones = RESTRICCIONES_POR_PAIS_MUDANZA[paisKey];
+        restriccionesEncontradas = {
+          problemas: [...restriccionesEncontradas.problemas, ...restricciones.problemas],
+          recomendaciones: [...restriccionesEncontradas.recomendaciones, ...restricciones.recomendaciones]
+        };
+      }
+    });
+    
+    setRestriccionesPais(restriccionesEncontradas);
+  };
+
+  const cargarSugerenciasParaHabitacion = () => {
+    // Si ya hay sugerencias generadas para esta habitación, usarlas
+    if (sugerenciasPorHabitacionRef.current[caja.habitacion]) {
+      setSugerencias(sugerenciasPorHabitacionRef.current[caja.habitacion]);
+    } else {
+      // Cargar sugerencias básicas por defecto
+      const sugerenciasBasicas = {
+        'living': ['Decoraciones de pared', 'Libros y revistas', 'Control remoto y accesorios', 'Cojines decorativos', 'Alfombra pequeña'],
+        'kitchen': ['Utensilios de cocina', 'Vajilla y cubiertos', 'Electrodomésticos pequeños', 'Tablas de cortar', 'Tuppers y recipientes'],
+        'bedroom': ['Ropa de cama', 'Almohadas y cojines', 'Accesorios personales', 'Joyería organizada', 'Cosméticos en bañera'],
+        'bathroom': ['Toallas y albornoces', 'Productos de higiene', 'Botiquín de primeros auxilios', 'Accesorios de ducha', 'Espejos pequeños'],
+        'office': ['Material de oficina', 'Documentos importantes', 'Libros de referencia', 'Cables y cargadores', 'Accesorios de computadora'],
+        'garage': ['Herramientas manuales', 'Equipo deportivo', 'Productos de limpieza', 'Bicicletas desarmadas', 'Cajas de almacenamiento'],
+        'other': ['Artículos varios', 'Decoraciones varias', 'Objetos personales', 'Regalos sin abrir', 'Recuerdos y fotos']
+      };
+      
+      const sugerenciasHabitacion = sugerenciasBasicas[caja.habitacion] || [
+        'Documentos importantes',
+        'Objetos de valor',
+        'Productos de limpieza básicos',
+        'Herramientas para desarmar',
+        'Material de embalaje extra'
+      ];
+      
+      setSugerencias(sugerenciasHabitacion.slice(0, 5));
+    }
+  };
+
+  const getAISuggestions = async () => {
+    if (!caja.habitacion || !moveType) {
+      Alert.alert('Información requerida', 'Selecciona una habitación para generar sugerencias');
+      return;
+    }
+
+    // Marcar que ya se presionó el botón para esta habitación
+    setAiButtonPressedPorHabitacion(prev => ({
+      ...prev,
+      [caja.habitacion]: true
+    }));
+
+    setLoadingAI(true);
+    try {
+      const API_URL = "https://api.groq.com/openai/v1/chat/completions";
+
+      const prompt = `Como experto en mudanzas internacionales, genera una lista de EXACTAMENTE 10 artículos específicos para empacar de la habitación ${caja.habitacion} para una mudanza a ${moveDestination} de tipo ${moveType}.
+
+Requisitos CRÍTICOS:
+1. SOLO 10 artículos, ni uno más ni uno menos
+2. Formato: lista separada por comas, sin numeración
+3. Considera: clima de ${moveDestination}, regulaciones aduanales, fragilidad
+4. Incluye artículos frecuentemente olvidados
+5. Prioriza objetos prácticos y necesarios
+6. Evita repeticiones
+
+Ejemplo de formato correcto: "Articulo Logico de la habitacion,Articulo Logico de la habitacion,Articulo Logico de la habitacion,Articulo Logico de la habitacion,Articulo Logico de la habitacion..."
+
+IMPORTANTE: Responde SOLO con los 10 artículos separados por comas, sin texto adicional.`;
+
+      const response = await fetch(API_URL, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${GROQ_API_KEY}`,
+        },
+        body: JSON.stringify({
+          model: "llama-3.1-8b-instant",
+          messages: [
+            {
+              role: "system",
+              content: "Eres un asistente especializado en mudanzas internacionales. Siempre generas listas de EXACTAMENTE 10 artículos separados por comas. Nunca agregas explicaciones, numeración o texto adicional. Tu respuesta es solo la lista de 10 items."
+            },
+            {
+              role: "user",
+              content: prompt
+            }
+          ],
+          temperature: 0.7,
+          max_tokens: 150,
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`Error HTTP: ${response.status}`);
+      }
+
+      const data = await response.json();
+      
+      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
+        throw new Error('Respuesta de IA en formato incorrecto');
+      }
+      
+      const aiMessage = data.choices[0].message.content;
+      
+      // Procesar la respuesta para obtener exactamente 10 items
+      let aiSuggestions = aiMessage.split(',')
+        .map(item => item.trim())
+        .filter(item => item && item.length > 0 && item.length < 50);
+      
+      // Asegurar exactamente 10 items
+      if (aiSuggestions.length > 10) {
+        aiSuggestions = aiSuggestions.slice(0, 10);
+      } else if (aiSuggestions.length < 10) {
+        // Completar con sugerencias genéricas si faltan
+        const sugerenciasGenericas = [
+          'Documentos importantes y pasaportes',
+          'Kit de herramientas básicas',
+          'Medicamentos personales con receta',
+          'Juego de llaves y copias',
+          'Dispositivos electrónicos y cargadores',
+          'Ropa adecuada al clima destino',
+          'Productos de higiene personal',
+          'Dinero en efectivo local',
+          'Snacks no perecederos para el viaje',
+          'Botiquín de primeros auxilios'
+        ];
+        
+        while (aiSuggestions.length < 10) {
+          const sugerencia = sugerenciasGenericas[aiSuggestions.length];
+          if (!aiSuggestions.includes(sugerencia)) {
+            aiSuggestions.push(sugerencia);
+          }
+        }
+      }
+      
+      // Eliminar duplicados
+      aiSuggestions = [...new Set(aiSuggestions)];
+      
+      // Guardar en referencia para esta habitación
+      sugerenciasPorHabitacionRef.current[caja.habitacion] = aiSuggestions;
+      setSugerencias(aiSuggestions);
+      
+    } catch (error) {
+      console.error('Error con IA:', error);
+      
+      // Sugerencias por defecto organizadas
+      const sugerenciasPorDefecto = {
+        'living': ['Decoraciones de pared', 'Libros organizados por género', 'Control remoto y baterías', 'Cojines decorativos en bolsas', 'Alfombra enrollada y sellada', 'Figuras y adornos frágiles', 'DVDs y Blu-rays', 'Juegos de mesa', 'Velas y candelabros', 'Plantas artificiales'],
+        'kitchen': ['Utensilios de cocina por tipo', 'Vajilla con separadores', 'Electrodomésticos pequeños limpiados', 'Tablas de cortar de diferentes tamaños', 'Tuppers con tapas aseguradas', 'Cuchillos en fundas protectoras', 'Espátulas y cucharas de madera', 'Tazas y tazones anidados', 'Saleros y pimenteros', 'Trapos de cocina limpios'],
+        'bedroom': ['Juego completo de ropa de cama', 'Almohadas en bolsas al vacío', 'Accesorios personales organizados', 'Joyería en cajas organizadoras', 'Cosméticos en contenedores seguros', 'Ropa por temporada', 'Zapatos en cajas individuales', 'Bolsos y carteras', 'Relojes y joyería fina', 'Artículos de aseo personal'],
+        'bathroom': ['Toallas por tamaño y color', 'Productos de higiene sellados', 'Botiquín completo de primeros auxilios', 'Accesorios de ducha y bañera', 'Espejos con protección en esquinas', 'Cortinas de baño dobladas', 'Alfombrillas de baño limpias', 'Porta cepillos y pasta dental', 'Secador de pelo y planchas', 'Productos de spa y relajación'],
+        'office': ['Material de oficina por categoría', 'Documentos importantes en carpetas', 'Libros de referencia por tema', 'Cables y cargadores etiquetados', 'Accesorios de computadora organizados', 'Papelería y útiles escolares', 'Calculadoras y dispositivos electrónicos', 'Archivos y expedientes', 'Marcadores y resaltadores', 'Grapadoras y perforadoras'],
+        'garage': ['Herramientas manuales organizadas', 'Equipo deportivo limpio y seco', 'Productos de limpieza en contenedores seguros', 'Bicicletas desarmadas y engrasadas', 'Cajas de almacenamiento etiquetadas', 'Pinturas y solventes sellados', 'Escaleras y herramientas grandes', 'Cajas de herramientas completas', 'Equipo de jardinería limpio', 'Repuestos y piezas organizadas'],
+        'other': ['Artículos varios categorizados', 'Decoraciones por tipo de material', 'Objetos personales por dueño', 'Regalos sin abrir etiquetados', 'Recuerdos y fotos protegidos', 'Manuales e instrucciones', 'Juguetes y juegos infantiles', 'Material de manualidades', 'Decoraciones navideñas', 'Artículos deportivos diversos']
+      };
+      
+      const sugerenciasDefault = sugerenciasPorDefecto[caja.habitacion] || [
+        'Documentos importantes en carpeta',
+        'Llaves de todas las cerraduras',
+        'Herramientas básicas para emergencias',
+        'Productos de limpieza esenciales',
+        'Material de embalaje sobrante',
+        'Bolsas de basura y guantes',
+        'Cinta adhesiva y cortadores',
+        'Marcadores para etiquetar',
+        'Lista de inventario completa',
+        'Teléfonos de contacto importantes'
+      ];
+      
+      sugerenciasPorHabitacionRef.current[caja.habitacion] = sugerenciasDefault;
+      setSugerencias(sugerenciasDefault);
+    } finally {
+      setLoadingAI(false);
+    }
+  };
+
   const handleGoBack = () => {
     if (forceBoxes && !hasSavedBox) {
       Alert.alert(
@@ -152,8 +382,6 @@ const NewBoxScreen = ({ route, navigation }) => {
       return;
     }
 
-    console.log('🟡 Navegando desde NewBox - Origen:', originScreen);
-    
     switch(originScreen) {
       case 'Home':
         navigation.navigate('Home');
@@ -184,95 +412,12 @@ const NewBoxScreen = ({ route, navigation }) => {
     }
   };
 
-  // Cargar sugerencias basadas en la habitación seleccionada
-  useEffect(() => {
-    if (caja.habitacion && !isEditMode) {
-      cargarSugerenciasPorHabitacion();
-    }
-  }, [caja.habitacion, isEditMode]);
-
-  const cargarSugerenciasPorHabitacion = () => {
-    const sugerenciasHabitacion = SUGERENCIAS_POR_HABITACION[caja.habitacion] || [];
-    
-    // Agregar sugerencias generales
-    const sugerenciasCompletas = [
-      ...sugerenciasHabitacion,
-      'Documentos importantes',
-      'Llaves',
-      'Herramientas básicas',
-      'Productos de limpieza',
-      'Primeros auxilios'
-    ];
-    
-    setSugerencias(sugerenciasCompletas.slice(0, 10));
-  };
-
-  const getAISuggestions = async () => {
-    if (!caja.habitacion || !moveType) {
-      Alert.alert('Info', 'Selecciona una habitación para generar sugerencias específicas');
-      return;
-    }
-
-    setLoadingAI(true);
-    try {
-      const API_URL = "https://api.groq.com/openai/v1/chat/completions";
-
-      const prompt = `Como experto en mudanzas, sugiere 10 artículos específicos para empacar en una caja de la habitación ${caja.habitacion} para una mudanza de tipo ${moveType}. 
-      Considera artículos importantes, frágiles u olvidados comúnmente.
-      Responde SOLO con una lista separada por comas, sin numeración ni explicaciones.`;
-
-      const response = await fetch(API_URL, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${GROQ_API_KEY}`,
-        },
-        body: JSON.stringify({
-          model: "llama-3.1-8b-instant",
-          messages: [
-            {
-              role: "system",
-              content: "Eres un asistente especializado en mudanzas y organización. Proporcionas listas concisas de artículos específicos para cada tipo de habitación y mudanza."
-            },
-            {
-              role: "user",
-              content: prompt
-            }
-          ],
-          temperature: 0.7,
-          max_tokens: 200,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`Error HTTP: ${response.status}`);
-      }
-
-      const data = await response.json();
-      
-      if (!data.choices || !data.choices[0] || !data.choices[0].message) {
-        throw new Error('Respuesta de IA en formato incorrecto');
-      }
-      
-      const aiMessage = data.choices[0].message.content;
-      const aiSuggestions = aiMessage.split(',').map(item => item.trim()).filter(item => item);
-      
-      setSugerencias(aiSuggestions.slice(0, 10));
-      
-    } catch (error) {
-      console.error('Error con IA:', error);
-      cargarSugerenciasPorHabitacion();
-    } finally {
-      setLoadingAI(false);
-    }
-  };
-
   const agregarItem = () => {
     if (itemActual.trim()) {
       setCaja({
         ...caja,
         items: [...caja.items, { 
-          id: Date.now().toString(), 
+          id: Date.now().toString() + Math.random(), 
           nombre: itemActual.trim() 
         }]
       });
@@ -288,14 +433,23 @@ const NewBoxScreen = ({ route, navigation }) => {
   };
 
   const agregarSugerencia = (sugerencia) => {
+    // Agregar a los items de la caja
     setCaja({
       ...caja,
       items: [...caja.items, { 
-        id: Date.now().toString(), 
+        id: Date.now().toString() + Math.random(), 
         nombre: sugerencia 
       }]
     });
-    setSugerencias(sugerencias.filter(item => item !== sugerencia));
+    
+    // Eliminar de las sugerencias actuales
+    const nuevasSugerencias = sugerencias.filter(item => item !== sugerencia);
+    setSugerencias(nuevasSugerencias);
+    
+    // Actualizar la referencia para esta habitación
+    if (caja.habitacion) {
+      sugerenciasPorHabitacionRef.current[caja.habitacion] = nuevasSugerencias;
+    }
   };
 
   const seleccionarTipo = (tipoId) => {
@@ -304,15 +458,17 @@ const NewBoxScreen = ({ route, navigation }) => {
   };
 
   const seleccionarHabitacion = (habitacionId) => {
+    const habitacionAnterior = caja.habitacion;
     setCaja({ ...caja, habitacion: habitacionId });
     setShowHabitacionModal(false);
+    
+    // Si cambia de habitación, mostrar botón de IA solo si no se ha usado para la nueva habitación
+    if (habitacionId !== habitacionAnterior) {
+      setSugerencias([]);
+    }
   };
 
   const guardarCaja = async () => {
-    console.log('🟡 Botón presionado - Modo:', isEditMode ? 'EDITAR' : 'CREAR');
-    console.log('🟡 ForceBoxes:', forceBoxes);
-    console.log('🟡 Origin:', originScreen);
-    
     if (!caja.tipo) {
       Alert.alert('Error', 'Por favor selecciona un tipo de caja');
       return;
@@ -345,16 +501,10 @@ const NewBoxScreen = ({ route, navigation }) => {
         updatedAt: new Date()
       };
 
-      console.log('🟡 Enviando datos de caja:', cajaData);
-      
       if (isEditMode && boxId) {
-        console.log('✏️ Actualizando caja existente:', boxId);
         await updateBox(moveId, boxId, cajaData);
-        console.log('🟢 Caja actualizada correctamente');
       } else {
-        console.log('🆕 Creando nueva caja');
         await saveBox(moveId, cajaData);
-        console.log('🟢 Caja guardada correctamente en Firebase');
       }
       
       setHasSavedBox(true);
@@ -367,14 +517,14 @@ const NewBoxScreen = ({ route, navigation }) => {
             {
               text: 'Finalizar',
               onPress: () => {
-                console.log('🔵 Navegando a HOME desde modo bloqueante');
                 navigation.replace('Home');
               }
             },
             {
               text: 'Agregar Otra Caja',
               onPress: () => {
-                console.log('🟡 Reiniciando formulario para nueva caja...');
+                // Mantener las sugerencias de IA si ya se generaron
+                const sugerenciasActuales = [...sugerencias];
                 setCaja({
                   tipo: '',
                   habitacion: '',
@@ -385,7 +535,10 @@ const NewBoxScreen = ({ route, navigation }) => {
                   peso: '',
                   color: '#BB86FC'
                 });
-                setSugerencias([]);
+                // Restaurar sugerencias si ya estaban generadas
+                if (sugerenciasActuales.length > 0) {
+                  setSugerencias(sugerenciasActuales);
+                }
               }
             }
           ]
@@ -398,8 +551,6 @@ const NewBoxScreen = ({ route, navigation }) => {
             {
               text: 'Finalizar',
               onPress: () => {
-                console.log('🔵 Navegando según ORIGIN:', originScreen);
-                
                 switch(originScreen) {
                   case 'Home':
                     navigation.navigate('Home');
@@ -433,7 +584,8 @@ const NewBoxScreen = ({ route, navigation }) => {
             ...(isEditMode ? [] : [{
               text: 'Agregar Otra Caja',
               onPress: () => {
-                console.log('🟡 Reiniciando formulario para nueva caja...');
+                // Mantener las sugerencias de IA si ya se generaron
+                const sugerenciasActuales = [...sugerencias];
                 setCaja({
                   tipo: '',
                   habitacion: '',
@@ -444,7 +596,10 @@ const NewBoxScreen = ({ route, navigation }) => {
                   peso: '',
                   color: '#BB86FC'
                 });
-                setSugerencias([]);
+                // Restaurar sugerencias si ya estaban generadas
+                if (sugerenciasActuales.length > 0) {
+                  setSugerencias(sugerenciasActuales);
+                }
               }
             }])
           ]
@@ -488,6 +643,11 @@ const NewBoxScreen = ({ route, navigation }) => {
       : 'Seleccionar habitación';
   };
 
+  // Verificar si el botón de IA debe estar habilitado
+  const isAIButtonEnabled = () => {
+    return caja.habitacion && !aiButtonPressedPorHabitacion[caja.habitacion];
+  };
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
@@ -495,7 +655,6 @@ const NewBoxScreen = ({ route, navigation }) => {
       {renderHeader()}
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* INDICADOR DE MODO BLOQUEANTE */}
         {forceBoxes && (
           <View style={styles.requiredSection}>
             <Ionicons name="warning" size={16} color="#FFA500" />
@@ -505,7 +664,6 @@ const NewBoxScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Información de la Mudanza */}
         <View style={styles.moveInfo}>
           <Text style={styles.moveTitle}>Mudanza: {moveOrigin} → {moveDestination}</Text>
           <Text style={styles.moveType}>Tipo: {moveType}</Text>
@@ -514,11 +672,9 @@ const NewBoxScreen = ({ route, navigation }) => {
           )}
         </View>
 
-        {/* Información Básica de la Caja */}
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Información de la Caja</Text>
           
-          {/* Nombre de la caja (opcional) */}
           <TextInput
             style={styles.input}
             placeholder="Nombre de la caja (opcional)"
@@ -527,7 +683,6 @@ const NewBoxScreen = ({ route, navigation }) => {
             onChangeText={(text) => setCaja({...caja, nombre: text})}
           />
 
-          {/* Tipo de Caja */}
           <TouchableOpacity 
             style={styles.selector}
             onPress={() => setShowTipoModal(true)}
@@ -538,7 +693,6 @@ const NewBoxScreen = ({ route, navigation }) => {
             <Ionicons name="chevron-down" size={20} color="#BB86FC" />
           </TouchableOpacity>
 
-          {/* Habitación */}
           <TouchableOpacity 
             style={styles.selector}
             onPress={() => setShowHabitacionModal(true)}
@@ -549,7 +703,6 @@ const NewBoxScreen = ({ route, navigation }) => {
             <Ionicons name="chevron-down" size={20} color="#BB86FC" />
           </TouchableOpacity>
 
-          {/* Peso y Fragilidad */}
           <View style={styles.rowContainer}>
             <TextInput
               style={[styles.input, { flex: 1, marginRight: 10 }]}
@@ -575,7 +728,6 @@ const NewBoxScreen = ({ route, navigation }) => {
             </TouchableOpacity>
           </View>
 
-          {/* Descripción */}
           <TextInput
             style={[styles.input, styles.textArea]}
             placeholder="Descripción o notas adicionales..."
@@ -587,26 +739,58 @@ const NewBoxScreen = ({ route, navigation }) => {
           />
         </View>
 
-        {/* Artículos Problemáticos */}
+        {/* Artículos Problemáticos Mejorados */}
         <View style={styles.warningSection}>
           <View style={styles.warningHeader}>
-            <Ionicons name="warning" size={16} color="#FFA000" />
-            <Text style={styles.warningTitle}>Artículos Problemáticos</Text>
+            <Ionicons name="warning" size={20} color="#FF6B6B" />
+            <Text style={styles.warningTitle}>⚠️ Artículos Problemáticos</Text>
           </View>
-          <Text style={styles.warningSubtitle}>
-            No empacar en cajas regulares
-          </Text>
-          <View style={styles.problematicosGrid}>
-            {ARTICULOS_PROBLEMATICOS.map((item, index) => (
-              <View key={index} style={styles.problematicoChip}>
-                <Ionicons name="alert-circle" size={14} color="#FFA000" />
+          
+          <Text style={styles.warningSubtitle}>🚫 NO EMPACAR EN CAJAS REGULARES</Text>
+          
+          <Text style={styles.problematicCategory}>Problemas Universales:</Text>
+          <View style={styles.problematicosList}>
+            {ARTICULOS_PROBLEMATICOS_UNIVERSALES.map((item, index) => (
+              <View key={`universal-${index}`} style={styles.problematicoItem}>
+                <Ionicons name="close-circle" size={14} color="#FF6B6B" />
                 <Text style={styles.problematicoText}>{item}</Text>
               </View>
             ))}
           </View>
+
+          {restriccionesPais.problemas.length > 0 && (
+            <>
+              <Text style={styles.problematicCategory}>Restricciones para {moveDestination}:</Text>
+              <View style={styles.problematicosList}>
+                {restriccionesPais.problemas.map((item, index) => (
+                  <View key={`pais-${index}`} style={styles.problematicoItem}>
+                    <Ionicons name="flag" size={14} color="#4ECDC4" />
+                    <Text style={styles.problematicoText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {restriccionesPais.recomendaciones.length > 0 && (
+            <>
+              <Text style={styles.recommendationCategory}>Recomendaciones para {moveDestination}:</Text>
+              <View style={styles.recommendationList}>
+                {restriccionesPais.recomendaciones.map((item, index) => (
+                  <View key={`rec-${index}`} style={styles.recommendationItem}>
+                    <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
+                    <Text style={styles.recommendationText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          <Text style={styles.warningNote}>
+            ⚠️ Consulta regulaciones específicas con tu empresa de mudanzas y aduanas del país destino.
+          </Text>
         </View>
 
-        {/* Agregar Artículos */}
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Artículos ({caja.items.length})</Text>
           
@@ -618,13 +802,13 @@ const NewBoxScreen = ({ route, navigation }) => {
               value={itemActual}
               onChangeText={setItemActual}
               onSubmitEditing={agregarItem}
+              returnKeyType="done"
             />
             <TouchableOpacity style={styles.addButton} onPress={agregarItem}>
               <Ionicons name="add" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Lista de Artículos */}
           {caja.items.map((item) => (
             <View key={item.id} style={styles.item}>
               <Text style={styles.itemText}>{item.nombre}</Text>
@@ -635,43 +819,68 @@ const NewBoxScreen = ({ route, navigation }) => {
           ))}
         </View>
 
-        {/* Sugerencias - Solo en modo creación */}
+        {/* Sugerencias de IA Mejoradas */}
         {!isEditMode && caja.habitacion && (
           <View style={styles.formSection}>
             <View style={styles.aiHeader}>
-              <Text style={styles.sectionTitle}>Sugerencias para {getHabitacionNombre()}</Text>
-              <TouchableOpacity 
-                style={styles.aiButton} 
-                onPress={getAISuggestions}
-                disabled={loadingAI}
-              >
-                {loadingAI ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Ionicons name="sparkles" size={16} color="#FFFFFF" />
-                )}
-                <Text style={styles.aiButtonText}>
-                  {loadingAI ? 'Generando...' : 'IA'}
-                </Text>
-              </TouchableOpacity>
+              <Text style={styles.sectionTitle}>
+                Sugerencias para {getHabitacionNombre()}
+              </Text>
+              
+              {isAIButtonEnabled() ? (
+                <TouchableOpacity 
+                  style={styles.aiButton} 
+                  onPress={getAISuggestions}
+                  disabled={loadingAI}
+                >
+                  {loadingAI ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <>
+                      <Ionicons name="sparkles" size={16} color="#FFFFFF" />
+                      <Text style={styles.aiButtonText}>Generar con IA</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              ) : (
+                <View style={styles.aiButtonDisabled}>
+                  <Ionicons name="checkmark-circle" size={16} color="#4CAF50" />
+                  <Text style={styles.aiButtonTextDisabled}>Sugerencias generadas</Text>
+                </View>
+              )}
             </View>
 
-            <View style={styles.suggestionsGrid}>
-              {sugerencias.map((sugerencia, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.suggestionChip}
-                  onPress={() => agregarSugerencia(sugerencia)}
-                >
-                  <Text style={styles.suggestionText}>{sugerencia}</Text>
-                  <Ionicons name="add" size={14} color="#4CAF50" />
-                </TouchableOpacity>
-              ))}
-            </View>
+            {sugerencias.length > 0 && (
+              <>
+                <Text style={styles.aiSubtitle}>
+                  Lista de {sugerencias.length} artículos específicos para {getHabitacionNombre()}
+                  {sugerencias.length < 10 && ' (algunos ya fueron agregados)'}
+                </Text>
+                
+                <View style={styles.suggestionsList}>
+                  {sugerencias.map((sugerencia, index) => (
+                    <TouchableOpacity
+                      key={index}
+                      style={styles.suggestionItem}
+                      onPress={() => agregarSugerencia(sugerencia)}
+                    >
+                      <View style={styles.suggestionLeft}>
+                        <Text style={styles.suggestionNumber}>{index + 1}.</Text>
+                        <Text style={styles.suggestionText}>{sugerencia}</Text>
+                      </View>
+                      <Ionicons name="add-circle-outline" size={22} color="#BB86FC" />
+                    </TouchableOpacity>
+                  ))}
+                </View>
+                
+                <Text style={styles.aiNote}>
+                  💡 Presiona cualquier artículo para agregarlo a tu caja (se eliminará de la lista)
+                </Text>
+              </>
+            )}
           </View>
         )}
 
-        {/* Botón Guardar/Actualizar */}
         <TouchableOpacity 
           style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
           onPress={guardarCaja}
@@ -687,7 +896,7 @@ const NewBoxScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Modal de Selección de Tipo de Caja */}
+      {/* Modales */}
       <Modal
         visible={showTipoModal}
         transparent
@@ -743,7 +952,6 @@ const NewBoxScreen = ({ route, navigation }) => {
         </TouchableWithoutFeedback>
       </Modal>
 
-      {/* Modal de Selección de Habitación */}
       <Modal
         visible={showHabitacionModal}
         transparent
@@ -933,47 +1141,88 @@ const styles = StyleSheet.create({
     textAlignVertical: 'top',
   },
   warningSection: {
-    backgroundColor: 'rgba(255, 160, 0, 0.1)',
+    backgroundColor: 'rgba(255, 107, 107, 0.05)',
     padding: 15,
     borderRadius: 10,
     marginBottom: 25,
-    borderLeftWidth: 4,
-    borderLeftColor: '#FFA000',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 107, 107, 0.3)',
   },
   warningHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 10,
     gap: 8,
   },
   warningTitle: {
-    color: '#FFA000',
-    fontSize: 16,
+    color: '#FF6B6B',
+    fontSize: 18,
     fontWeight: 'bold',
   },
   warningSubtitle: {
-    color: '#FFA000',
+    color: '#FF6B6B',
     fontSize: 14,
+    fontWeight: '600',
     marginBottom: 10,
-    fontStyle: 'italic',
   },
-  problematicosGrid: {
+  problematicCategory: {
+    color: '#FF6B6B',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  recommendationCategory: {
+    color: '#4CAF50',
+    fontSize: 14,
+    fontWeight: '600',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  problematicosList: {
+    gap: 8,
+    marginBottom: 5,
+  },
+  recommendationList: {
+    gap: 8,
+    marginBottom: 5,
+  },
+  problematicoItem: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 107, 107, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
     gap: 8,
   },
-  problematicoChip: {
+  recommendationItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(255, 160, 0, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 15,
-    gap: 5,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(76, 175, 80, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 8,
   },
   problematicoText: {
     color: '#FFA000',
     fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
+  recommendationText: {
+    color: '#4CAF50',
+    fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
+  warningNote: {
+    color: '#FFA000',
+    fontSize: 10,
+    marginTop: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   addItemContainer: {
     flexDirection: 'row',
@@ -1026,28 +1275,69 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     gap: 5,
   },
+  aiButtonDisabled: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 20,
+    gap: 5,
+    borderWidth: 1,
+    borderColor: '#4CAF50',
+  },
   aiButtonText: {
     color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
   },
-  suggestionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  aiButtonTextDisabled: {
+    color: '#4CAF50',
+    fontSize: 12,
+    fontWeight: 'bold',
   },
-  suggestionChip: {
+  aiSubtitle: {
+    color: '#BB86FC',
+    fontSize: 12,
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  suggestionsList: {
+    gap: 8,
+  },
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(187, 134, 252, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(187, 134, 252, 0.3)',
+  },
+  suggestionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2A2A2A',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 5,
+    flex: 1,
+  },
+  suggestionNumber: {
+    color: '#BB86FC',
+    fontSize: 12,
+    fontWeight: 'bold',
+    marginRight: 8,
+    width: 20,
   },
   suggestionText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 14,
+    flex: 1,
+  },
+  aiNote: {
+    color: '#BB86FC',
+    fontSize: 10,
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   saveButton: {
     backgroundColor: '#4CAF50',

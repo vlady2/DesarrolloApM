@@ -1,16 +1,17 @@
-// NewMoveScreen.js
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  Modal,
   ScrollView,
   StatusBar,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
+  TouchableWithoutFeedback,
   View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +33,7 @@ const NewMoveScreen = ({ route, navigation }) => {
   const [saving, setSaving] = useState(false);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [existingMoves, setExistingMoves] = useState([]);
+  const [showMoveTypeModal, setShowMoveTypeModal] = useState(false); // ✅ Nuevo estado para modal
 
   const insets = useSafeAreaInsets();
 
@@ -230,37 +232,26 @@ const NewMoveScreen = ({ route, navigation }) => {
             }
         }
     });
-};
+  };
 
-
+  // ✅ MODIFICADA: Función selectMoveType con Modal personalizado
   const selectMoveType = () => {
-    const moveTypes = [
-      { label: '🚚 Mudanza Residencial', value: 'residential' },
-      { label: '🏢 Mudanza de Oficina', value: 'office' },
-      { label: '🎓 Mudanza Estudiantil', value: 'student' },
-      { label: '🌎 Mudanza Internacional', value: 'international' },
-      { label: '📦 Solo Almacenamiento', value: 'storage' },
-      { label: '🏠 Otro tipo', value: 'other' }
-    ];
+    setShowMoveTypeModal(true);
+  };
 
-    const options = moveTypes.map(type => ({
-      text: type.label,
-      onPress: () => setMove({...move, moveType: type.value})
-    }));
-
-    options.push({ text: 'Cancelar', style: 'cancel' });
-
-    Alert.alert('Tipo de Mudanza', 'Selecciona el tipo de mudanza:', options);
+  // ✅ Función para seleccionar tipo desde modal
+  const handleSelectMoveType = (type, label) => {
+    setMove({...move, moveType: type});
+    setShowMoveTypeModal(false);
   };
 
   const getMoveTypeLabel = () => {
     const types = {
-      'residential': '🚚 Mudanza Residencial',
-      'office': '🏢 Mudanza de Oficina',
-      'student': '🎓 Mudanza Estudiantil',
-      'international': '🌎 Mudanza Internacional',
-      'storage': '📦 Solo Almacenamiento',
-      'other': '🏠 Otro tipo'
+      'office': '🏢 Mudanza para oficina',
+      'residential': '🏠 Mudanza residencial',
+      'personal': '👤 Mudanza particular',
+      'company': '🏭 Mudanza para empresa',
+      'other': '🚚 Otro tipo de mudanza'
     };
     return types[move.moveType] || 'Seleccionar tipo de mudanza';
   };
@@ -381,6 +372,125 @@ const NewMoveScreen = ({ route, navigation }) => {
     }
   };
 
+  // ✅ Modal para seleccionar tipo de mudanza
+  const renderMoveTypeModal = () => (
+    <Modal
+      visible={showMoveTypeModal}
+      transparent
+      animationType="slide"
+      onRequestClose={() => setShowMoveTypeModal(false)}
+    >
+      <TouchableWithoutFeedback onPress={() => setShowMoveTypeModal(false)}>
+        <View style={styles.modalOverlay}>
+          <TouchableWithoutFeedback>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Tipo de Mudanza</Text>
+              <Text style={styles.modalSubtitle}>Selecciona el tipo de mudanza:</Text>
+              
+              {/* Opción 1: Mudanza para oficina */}
+              <TouchableOpacity
+                style={[styles.typeOption, move.moveType === 'office' && styles.typeOptionSelected]}
+                onPress={() => handleSelectMoveType('office', '🏢 Mudanza para Oficina')}
+              >
+                <View style={styles.typeIcon}>
+                  <Text style={styles.typeIconText}>🏢</Text>
+                </View>
+                <View style={styles.typeTextContainer}>
+                  <Text style={[styles.typeText, move.moveType === 'office' && styles.typeTextSelected]}>
+                    Mudanza para Oficina
+                  </Text>
+                  <Text style={[styles.typeDescription, move.moveType === 'office' && styles.typeDescriptionSelected]}>
+                    Oficinas y espacios de trabajo
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              
+              {/* Opción 2: Mudanza para empresa */}
+              <TouchableOpacity
+                style={[styles.typeOption, move.moveType === 'company' && styles.typeOptionSelected]}
+                onPress={() => handleSelectMoveType('company', '🏭 Mudanza para empresa')}
+              >
+                <View style={styles.typeIcon}>
+                  <Text style={styles.typeIconText}>🏭</Text>
+                </View>
+                <View style={styles.typeTextContainer}>
+                  <Text style={[styles.typeText, move.moveType === 'company' && styles.typeTextSelected]}>
+                    Mudanza para empresa
+                  </Text>
+                  <Text style={[styles.typeDescription, move.moveType === 'company' && styles.typeDescriptionSelected]}>
+                    Almacenes y empresas
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              
+              {/* Opción 3: Mudanza  */}
+              <TouchableOpacity
+                style={[styles.typeOption, move.moveType === 'residential' && styles.typeOptionSelected]}
+                onPress={() => handleSelectMoveType('residential', '🏠 Mudanza ')}
+              >
+                <View style={styles.typeIcon}>
+                  <Text style={styles.typeIconText}>🏠</Text>
+                </View>
+                <View style={styles.typeTextContainer}>
+                  <Text style={[styles.typeText, move.moveType === 'residential' && styles.typeTextSelected]}>
+                    Mudanza 
+                  </Text>
+                  <Text style={[styles.typeDescription, move.moveType === 'residential' && styles.typeDescriptionSelected]}>
+                    Casas, apartamentos, hogares
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              
+              {/* Opción 4: Mudanza particular */}
+              <TouchableOpacity
+                style={[styles.typeOption, move.moveType === 'personal' && styles.typeOptionSelected]}
+                onPress={() => handleSelectMoveType('personal', '👤 Mudanza particular')}
+              >
+                <View style={styles.typeIcon}>
+                  <Text style={styles.typeIconText}>👤</Text>
+                </View>
+                <View style={styles.typeTextContainer}>
+                  <Text style={[styles.typeText, move.moveType === 'personal' && styles.typeTextSelected]}>
+                    Mudanza particular
+                  </Text>
+                  <Text style={[styles.typeDescription, move.moveType === 'personal' && styles.typeDescriptionSelected]}>
+                    Traslados personales, pocos objetos
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              
+              {/* Opción 5: Otro tipo */}
+              <TouchableOpacity
+                style={[styles.typeOption, move.moveType === 'other' && styles.typeOptionSelected]}
+                onPress={() => handleSelectMoveType('other', '🚚 Otro tipo de mudanza')}
+              >
+                <View style={styles.typeIcon}>
+                  <Text style={styles.typeIconText}>🚚</Text>
+                </View>
+                <View style={styles.typeTextContainer}>
+                  <Text style={[styles.typeText, move.moveType === 'other' && styles.typeTextSelected]}>
+                    Otro tipo de mudanza
+                  </Text>
+                  <Text style={[styles.typeDescription, move.moveType === 'other' && styles.typeDescriptionSelected]}>
+                    Otro tipo no especificado
+                  </Text>
+                </View>
+              </TouchableOpacity>
+              
+              {/* Botón Cancelar */}
+              <TouchableOpacity 
+                style={styles.cancelButton}
+                onPress={() => setShowMoveTypeModal(false)}
+              >
+                <Text style={styles.cancelButtonText}>Cancelar</Text>
+              </TouchableOpacity>
+            </View>
+          </TouchableWithoutFeedback>
+        </View>
+      </TouchableWithoutFeedback>
+    </Modal>
+  );
+
   return (
     <View style={[styles.container, { paddingTop: insets.top }]}>
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
@@ -398,24 +508,24 @@ const NewMoveScreen = ({ route, navigation }) => {
           <Text style={styles.sectionTitle}>Información de la Mudanza</Text>
           
           <TouchableOpacity 
-    style={styles.inputWithIcon} 
-    onPress={() => selectLocation('origin')}
->
-    <Text style={move.origin ? styles.inputText : styles.placeholderText}>
-        {move.origin || 'Dirección de origen *'}
-    </Text>
-    <Ionicons name="map-outline" size={20} color="#BB86FC" />
-</TouchableOpacity>
+            style={styles.inputWithIcon} 
+            onPress={() => selectLocation('origin')}
+          >
+            <Text style={move.origin ? styles.inputText : styles.placeholderText}>
+                {move.origin || 'Dirección de origen *'}
+            </Text>
+            <Ionicons name="map-outline" size={20} color="#BB86FC" />
+          </TouchableOpacity>
           
           <TouchableOpacity 
-    style={styles.inputWithIcon} 
-    onPress={() => selectLocation('destination')}
->
-    <Text style={move.destination ? styles.inputText : styles.placeholderText}>
-        {move.destination || 'Dirección de destino *'}
-    </Text>
-    <Ionicons name="map-outline" size={20} color="#BB86FC" />
-</TouchableOpacity>
+            style={styles.inputWithIcon} 
+            onPress={() => selectLocation('destination')}
+          >
+            <Text style={move.destination ? styles.inputText : styles.placeholderText}>
+                {move.destination || 'Dirección de destino *'}
+            </Text>
+            <Ionicons name="map-outline" size={20} color="#BB86FC" />
+          </TouchableOpacity>
           
           <TouchableOpacity 
             style={styles.inputWithIcon} 
@@ -504,6 +614,8 @@ const NewMoveScreen = ({ route, navigation }) => {
           minimumDate={getMinimumDateForPicker()}
         />
       )}
+
+      {renderMoveTypeModal()}
     </View>
   );
 };
@@ -616,6 +728,89 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     textAlign: 'center',
+  },
+  // Estilos para el Modal de Tipo de Mudanza
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  modalContent: {
+    backgroundColor: '#1E1E1E',
+    borderRadius: 15,
+    padding: 20,
+    width: '90%',
+    maxHeight: '80%',
+  },
+  modalTitle: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 5,
+    textAlign: 'center',
+  },
+  modalSubtitle: {
+    color: '#BB86FC',
+    fontSize: 14,
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  typeOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2A2A2A',
+    padding: 15,
+    borderRadius: 10,
+    marginBottom: 10,
+    gap: 12,
+  },
+  typeOptionSelected: {
+    backgroundColor: '#BB86FC',
+  },
+  typeIcon: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#333',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  typeIconText: {
+    fontSize: 20,
+  },
+  typeTextContainer: {
+    flex: 1,
+  },
+  typeText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  typeTextSelected: {
+    color: '#000000',
+    fontWeight: 'bold',
+  },
+  typeDescription: {
+    color: '#888',
+    fontSize: 12,
+    marginTop: 2,
+  },
+  typeDescriptionSelected: {
+    color: '#444',
+  },
+  cancelButton: {
+    marginTop: 10,
+    padding: 15,
+    alignItems: 'center',
+    borderRadius: 10,
+    backgroundColor: '#333',
+  },
+  cancelButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
   },
 });
 

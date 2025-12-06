@@ -1,43 +1,74 @@
 import { useEffect, useState } from 'react';
 import {
-    ActivityIndicator,
-    FlatList,
-    Modal,
-    StatusBar,
-    StyleSheet,
-    Text,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  FlatList,
+  Modal,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getUserTrips } from '../../firebase/tripService';
 
-// ✅ Base de datos de artículos prohibidos (la misma que usas en NewMaletaScreen)
-const ARTICULOS_PROHIBIDOS_POR_PAIS = {
-  'méxico': ['Frutas y vegetales frescos', 'Semillas sin certificado', 'Carne de res', 'Productos lácteos no pasteurizados'],
-  'mexico': ['Frutas y vegetales frescos', 'Semillas sin certificado', 'Carne de res', 'Productos lácteos no pasteurizados'],
-  'españa': ['Productos cárnicos de fuera de la UE', 'Plantas sin certificado fitosanitario', 'Drogas recreativas', 'Armas de fuego'],
-  'espana': ['Productos cárnicos de fuera de la UE', 'Plantas sin certificado fitosanitario', 'Drogas recreativas', 'Armas de fuego'],
-  'estados unidos': ['Frutas tropicales', 'Carne de cerdo', 'Quesos artesanales', 'Productos de CBD'],
-  'usa': ['Frutas tropicales', 'Carne de cerdo', 'Quesos artesanales', 'Productos de CBD'],
-  'ee.uu.': ['Frutas tropicales', 'Carne de cerdo', 'Quesos artesanales', 'Productos de CBD'],
-  'ue': ['Productos transgénicos no autorizados', 'Animales en peligro de extinción', 'Pesticidas prohibidos'],
-  'europa': ['Productos transgénicos no autorizados', 'Animales en peligro de extinción', 'Pesticidas prohibidos'],
-  'latinoamérica': ['Electrónicos sin factura', 'Juguetes con pilas de litio', 'Productos pirata'],
-  'latinoamerica': ['Electrónicos sin factura', 'Juguetes con pilas de litio', 'Productos pirata'],
-};
-
+// ✅ Base de datos de artículos prohibidos MEJORADA (igual que en NewMaletaScreen)
 const ARTICULOS_PROHIBIDOS_UNIVERSALES = [
-  'Líquidos sobre 100ml en equipaje de mano',
-  'Armas de cualquier tipo (incluidas réplicas)',
-  'Productos inflamables (aerósoles, gasolina)',
-  'Drogas ilegales y sustancias controladas',
-  'Animales vivos sin documentación',
-  'Comida perecedera sin refrigeración',
-  'Material pornográfico ilegal',
-  'Productos que infrinjan derechos de autor'
+  'Líquidos sobre 100ml en equipaje de mano (regla 3-1-1)',
+  'Armas de cualquier tipo (incluidas réplicas y objetos punzantes)',
+  'Productos inflamables (aerósoles, gasolina, fósforos, encendedores)',
+  'Drogas ilegales y sustancias controladas sin prescripción',
+  'Animales vivos sin documentación sanitaria y certificados',
+  'Comida perecedera sin refrigeración adecuada',
+  'Material explosivo o pirotécnico',
+  'Productos químicos tóxicos o corrosivos',
+  'Baterías de litio sueltas o dañadas',
+  'Objetos magnéticos fuertes que puedan interferir con equipos de vuelo'
 ];
+
+const PAISES_CON_RESTRICCIONES_ESPECIALES = {
+  'méxico/mexico': {
+    alimentos: ['Frutas y vegetales frescos', 'Carne de res y cerdo', 'Productos lácteos no pasteurizados'],
+    otros: ['Semillas sin certificado fitosanitario', 'Plantas sin permiso', 'Productos de cannabis']
+  },
+  'españa/espana': {
+    alimentos: ['Productos cárnicos de fuera de la UE', 'Leche y productos lácteos no UE'],
+    otros: ['Plantas sin certificado fitosanitario', 'Especies protegidas (CITES)']
+  },
+  'estados unidos/usa/ee.uu.': {
+    alimentos: ['Frutas tropicales frescas', 'Carne de cerdo', 'Quesos artesanales sin pasteurizar'],
+    otros: ['Productos de CBD/THC', 'Medicamentos no aprobados por FDA', 'Piratería']
+  },
+  'australia': {
+    alimentos: ['Cualquier alimento fresco o procesado', 'Productos de miel'],
+    otros: ['Productos de madera', 'Tierra o arena', 'Equipos deportivos usados']
+  },
+  'nueva zelanda/nuevazelanda': {
+    alimentos: ['Todos los productos agrícolas', 'Alimentos para camping'],
+    otros: ['Equipamiento deportivo sucio', 'Productos de piel animal']
+  },
+  'japón/japon': {
+    alimentos: ['Carne fresca y procesada', 'Frutas específicas como manzanas, cerezas'],
+    otros: ['Medicamentos no autorizados', 'Productos con contenido adulto explícito']
+  },
+  'canadá/canada': {
+    alimentos: ['Carne de res y aves', 'Productos lácteos no certificados'],
+    otros: ['Armas de defensa personal', 'Fuegos artificiales']
+  },
+  'reino unido': {
+    alimentos: ['Carne y productos cárnicos de países no UE', 'Leche cruda'],
+    otros: ['Especies en peligro (CITES)', 'Productos culturales robados']
+  },
+  'ue/europa': {
+    alimentos: ['Productos transgénicos no autorizados'],
+    otros: ['Animales en peligro de extinción', 'Pesticidas prohibidos']
+  },
+  'latinoamérica/latinoamerica': {
+    alimentos: [],
+    otros: ['Electrónicos sin factura', 'Juguetes con pilas de litio', 'Productos pirata']
+  }
+};
 
 const ArticulosProhibidosScreen = ({ navigation }) => {
   const [trips, setTrips] = useState([]);
@@ -46,6 +77,7 @@ const ArticulosProhibidosScreen = ({ navigation }) => {
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedTrip, setSelectedTrip] = useState(null);
   const [articulosProhibidos, setArticulosProhibidos] = useState([]);
+  const [restriccionesPais, setRestriccionesPais] = useState({ alimentos: [], otros: [] });
   
   const insets = useSafeAreaInsets();
 
@@ -74,7 +106,7 @@ const ArticulosProhibidosScreen = ({ navigation }) => {
     }
   };
 
-  // ✅ Función para determinar el estado del viaje (igual que en MyTripsScreen)
+  // ✅ Función para determinar el estado del viaje
   const getTripStatus = (trip) => {
     if (!trip.startDate) return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
     
@@ -119,32 +151,33 @@ const ArticulosProhibidosScreen = ({ navigation }) => {
     return { status: 'Planificado', color: '#FFA500', icon: 'calendar-outline' };
   };
 
-  // ✅ Función para cargar artículos prohibidos según el destino
+  // ✅ Función MEJORADA para cargar artículos prohibidos según el destino
   const cargarArticulosProhibidos = (trip) => {
     console.log('🟡 Cargando artículos prohibidos para:', trip.destination);
     
-    let articulosEspecificos = [];
+    let restriccionesEspecificas = { alimentos: [], otros: [] };
     
     if (trip.destination) {
       const destinoLower = trip.destination.toLowerCase();
       
-      // Buscar coincidencias por país
-      Object.keys(ARTICULOS_PROHIBIDOS_POR_PAIS).forEach(pais => {
-        if (destinoLower.includes(pais)) {
-          console.log(`🔵 Encontrados artículos prohibidos para: ${pais}`);
-          articulosEspecificos = [...articulosEspecificos, ...ARTICULOS_PROHIBIDOS_POR_PAIS[pais]];
+      // Buscar coincidencias por país con la nueva estructura
+      Object.keys(PAISES_CON_RESTRICCIONES_ESPECIALES).forEach(paisKey => {
+        const paises = paisKey.split('/');
+        const tieneCoincidencia = paises.some(pais => destinoLower.includes(pais));
+        
+        if (tieneCoincidencia) {
+          const restricciones = PAISES_CON_RESTRICCIONES_ESPECIALES[paisKey];
+          restriccionesEspecificas = {
+            alimentos: [...restriccionesEspecificas.alimentos, ...restricciones.alimentos],
+            otros: [...restriccionesEspecificas.otros, ...restricciones.otros]
+          };
         }
       });
     }
     
-    // Combinar artículos específicos con universales
-    const todosLosProhibidos = [
-      ...ARTICULOS_PROHIBIDOS_UNIVERSALES,
-      ...articulosEspecificos
-    ];
-    
-    console.log(`🟢 Total artículos prohibidos cargados: ${todosLosProhibidos.length}`);
-    setArticulosProhibidos(todosLosProhibidos);
+    setRestriccionesPais(restriccionesEspecificas);
+    setArticulosProhibidos(ARTICULOS_PROHIBIDOS_UNIVERSALES);
+    console.log(`🟢 Artículos prohibidos cargados: Universales: ${ARTICULOS_PROHIBIDOS_UNIVERSALES.length}, Específicos: Alimentos: ${restriccionesEspecificas.alimentos.length}, Otros: ${restriccionesEspecificas.otros.length}`);
   };
 
   // ✅ Abrir modal con artículos prohibidos del viaje seleccionado
@@ -159,6 +192,7 @@ const ArticulosProhibidosScreen = ({ navigation }) => {
     setModalVisible(false);
     setSelectedTrip(null);
     setArticulosProhibidos([]);
+    setRestriccionesPais({ alimentos: [], otros: [] });
   };
 
   // ✅ Navegación normal de regreso
@@ -209,6 +243,77 @@ const ArticulosProhibidosScreen = ({ navigation }) => {
           <Text style={styles.prohibitedText}>Ver artículos prohibidos</Text>
         </View>
       </TouchableOpacity>
+    );
+  };
+
+  // ✅ Función para renderizar los artículos prohibidos en el modal
+  const renderProhibidosContent = () => {
+    return (
+      <View style={styles.prohibidosContainer}>
+        {/* Artículos Prohibidos Universales */}
+        <View style={styles.prohibidosSection}>
+          <View style={styles.sectionHeader}>
+            <Ionicons name="warning" size={18} color="#FFA000" />
+            <Text style={styles.sectionTitle}>🚫 Prohibidos Universales</Text>
+          </View>
+          <Text style={styles.sectionSubtitle}>Aplican para todos los vuelos internacionales</Text>
+          
+          <View style={styles.prohibidosList}>
+            {articulosProhibidos.map((item, index) => (
+              <View key={`universal-${index}`} style={styles.prohibidoItem}>
+                <Ionicons name="close-circle" size={14} color="#F44336" />
+                <Text style={styles.prohibidoText}>{item}</Text>
+              </View>
+            ))}
+          </View>
+        </View>
+
+        {/* Restricciones Específicas por País */}
+        {restriccionesPais.alimentos.length > 0 && (
+          <View style={styles.prohibidosSection}>
+            <View style={styles.sectionHeader}>
+              <Ionicons name="flag" size={18} color="#4ECDC4" />
+              <Text style={styles.sectionTitle}>🍎 Restricciones para {selectedTrip?.destination}</Text>
+            </View>
+            
+            {restriccionesPais.alimentos.length > 0 && (
+              <>
+                <Text style={styles.categoriaTitle}>Alimentos:</Text>
+                <View style={styles.prohibidosList}>
+                  {restriccionesPais.alimentos.map((item, index) => (
+                    <View key={`alimento-${index}`} style={styles.prohibidoItem}>
+                      <Ionicons name="nutrition" size={14} color="#FF9800" />
+                      <Text style={styles.prohibidoText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {restriccionesPais.otros.length > 0 && (
+              <>
+                <Text style={styles.categoriaTitle}>Otros productos:</Text>
+                <View style={styles.prohibidosList}>
+                  {restriccionesPais.otros.map((item, index) => (
+                    <View key={`otro-${index}`} style={styles.prohibidoItem}>
+                      <Ionicons name="alert-circle" size={14} color="#2196F3" />
+                      <Text style={styles.prohibidoText}>{item}</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+          </View>
+        )}
+
+        {/* Nota informativa */}
+        <View style={styles.infoBox}>
+          <Ionicons name="information-circle" size={16} color="#4CAF50" />
+          <Text style={styles.infoText}>
+            ⚠️ Esta lista es referencial y puede variar. Consulta regulaciones actualizadas con tu aerolínea y la aduana del país destino.
+          </Text>
+        </View>
+      </View>
     );
   };
 
@@ -267,7 +372,7 @@ const ArticulosProhibidosScreen = ({ navigation }) => {
         />
       )}
 
-      {/* Modal de Artículos Prohibidos */}
+      {/* Modal de Artículos Prohibidos MEJORADO */}
       <Modal
         visible={modalVisible}
         animationType="slide"
@@ -290,39 +395,34 @@ const ArticulosProhibidosScreen = ({ navigation }) => {
             {/* Información del Viaje */}
             {selectedTrip && (
               <View style={styles.tripInfoModal}>
-                <Text style={styles.tripDestinationModal}>
-                  {selectedTrip.destination}
-                </Text>
-                <Text style={styles.tripPurposeModal}>
-                  {selectedTrip.purpose}
-                </Text>
-                <Text style={styles.tripDatesModal}>
-                  {selectedTrip.startDate} {selectedTrip.endDate ? `- ${selectedTrip.endDate}` : ''}
-                </Text>
+                <View style={styles.tripHeaderModal}>
+                  <Ionicons name="airplane" size={20} color="#BB86FC" />
+                  <Text style={styles.tripDestinationModal}>
+                    {selectedTrip.destination}
+                  </Text>
+                </View>
+                {selectedTrip.purpose && (
+                  <Text style={styles.tripPurposeModal}>
+                    {selectedTrip.purpose}
+                  </Text>
+                )}
+                <View style={styles.tripDatesContainer}>
+                  <Ionicons name="calendar" size={14} color="#BB86FC" />
+                  <Text style={styles.tripDatesModal}>
+                    {selectedTrip.startDate} {selectedTrip.endDate ? `- ${selectedTrip.endDate}` : ''}
+                  </Text>
+                </View>
               </View>
             )}
 
-            {/* Lista de Artículos Prohibidos */}
+            {/* Contenido de Artículos Prohibidos MEJORADO */}
             <FlatList
-              data={articulosProhibidos}
-              renderItem={({ item, index }) => (
-                <View style={styles.prohibidoItem}>
-                  <Ionicons name="close-circle" size={16} color="#F44336" />
-                  <Text style={styles.prohibidoItemText}>{item}</Text>
-                </View>
-              )}
-              keyExtractor={(item, index) => index.toString()}
-              style={styles.prohibidosList}
-              showsVerticalScrollIndicator={false}
+              data={[1]} // Dummy item para renderizar contenido personalizado
+              renderItem={() => renderProhibidosContent()}
+              keyExtractor={() => 'prohibidos-content'}
+              style={styles.prohibidosFlatList}
+              showsVerticalScrollIndicator={true}
             />
-
-            {/* Advertencia */}
-            <View style={styles.warningBox}>
-              <Ionicons name="information-circle" size={16} color="#2196F3" />
-              <Text style={styles.warningText}>
-                Lista referencial. Verifica regulaciones actuales con tu aerolínea.
-              </Text>
-            </View>
 
           </View>
         </View>
@@ -498,7 +598,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     padding: 0,
     width: '100%',
-    maxHeight: '80%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -524,57 +624,100 @@ const styles = StyleSheet.create({
     borderRadius: 10,
     marginTop: 10,
   },
+  tripHeaderModal: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 5,
+  },
   tripDestinationModal: {
     color: '#BB86FC',
     fontSize: 18,
     fontWeight: 'bold',
-    marginBottom: 5,
   },
   tripPurposeModal: {
     color: '#BB86FC',
     fontSize: 14,
     marginBottom: 5,
   },
+  tripDatesContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
   tripDatesModal: {
     color: '#BB86FC',
     fontSize: 12,
     fontStyle: 'italic',
   },
-  prohibidosList: {
-    maxHeight: 300,
+  prohibidosFlatList: {
     paddingHorizontal: 20,
+    paddingBottom: 20,
+  },
+  prohibidosContainer: {
+    paddingBottom: 20,
+  },
+  prohibidosSection: {
+    marginBottom: 25,
+  },
+  sectionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 8,
+  },
+  sectionTitle: {
+    color: '#FFA000',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  sectionSubtitle: {
+    color: '#FFA000',
+    fontSize: 12,
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  categoriaTitle: {
+    color: '#FF9800',
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 10,
+    marginBottom: 5,
+  },
+  prohibidosList: {
+    gap: 8,
   },
   prohibidoItem: {
     flexDirection: 'row',
     alignItems: 'flex-start',
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
-    padding: 12,
+    backgroundColor: 'rgba(255, 160, 0, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 8,
-    marginBottom: 8,
-    gap: 10,
+    gap: 8,
   },
-  prohibidoItemText: {
+  prohibidoText: {
     color: '#FFA000',
-    fontSize: 14,
+    fontSize: 12,
     flex: 1,
-    lineHeight: 20,
+    lineHeight: 16,
   },
-  warningBox: {
+  infoBox: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(33, 150, 243, 0.1)',
-    margin: 20,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(76, 175, 80, 0.05)',
     padding: 15,
     borderRadius: 8,
     gap: 10,
     borderLeftWidth: 4,
-    borderLeftColor: '#2196F3',
+    borderLeftColor: '#4CAF50',
   },
-  warningText: {
-    color: '#2196F3',
-    fontSize: 12,
+  infoText: {
+    color: '#4CAF50',
+    fontSize: 11,
     flex: 1,
     fontStyle: 'italic',
+    lineHeight: 16,
   },
 });
 

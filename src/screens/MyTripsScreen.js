@@ -971,9 +971,10 @@ const MyTripsScreen = ({ navigation }) => {
                 <Text style={styles.moveTypeText}>
                   {item.moveType === 'residential' ? '🚚 Residencial' :
                    item.moveType === 'office' ? '🏢 Oficina' :
-                   item.moveType === 'student' ? '🎓 Estudiantil' :
-                   item.moveType === 'international' ? '🌎 Internacional' :
-                   item.moveType === 'storage' ? '📦 Almacenamiento' : '🏠 Otro'}
+                   item.moveType === 'personal' ? '👤 Personal' :
+                   item.moveType === 'other' ?  '🏠 Otro': 
+                   item.moveType === 'company' ? '🏭 Empresa' : '🚚 Otro'}
+
                 </Text>
               </View>
             )}

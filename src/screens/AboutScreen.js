@@ -89,19 +89,19 @@ const AboutScreen = ({ navigation }) => {
     {
       icon: '📦',
       title: 'Gestión Inteligente',
-      description: 'Organiza maletas con IA, calcula pesos y sugiere contenido',
+      description: 'Organiza maletas con IA, Elige habitacion y sugiere contenido',
       color: '#3B82F6',
     },
     {
       icon: '🤖',
       title: 'IA Viajera',
-      description: 'Recomendaciones personalizadas basadas en tu destino y estilo',
+      description: 'Recomendaciones personalizadas basadas en tu destino y Pais',
       color: '#8B5CF6',
     },
     {
       icon: '⚠️',
       title: 'Alertas Prohibidas',
-      description: 'Detecta automáticamente artículos restringidos por pais',
+      description: 'Te avisamos sobre artículos no permitidos en el destino',
       color: '#EF4444',
     },
     {

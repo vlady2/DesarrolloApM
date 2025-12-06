@@ -541,9 +541,8 @@ const MoveDetailScreen = ({ route, navigation }) => {
         switch (moveType) {
             case 'residential': return '🚚 Mudanza Residencial';
             case 'office': return '🏢 Mudanza de Oficina';
-            case 'student': return '🎓 Mudanza Estudiantil';
-            case 'international': return '🌎 Mudanza Internacional';
-            case 'storage': return '📦 Solo Almacenamiento';
+            case 'personal': return '🚛 Mudanza Personal' ;
+            case 'company': return '🏭 Mudanza para Empresa';
             case 'other': return '🏠 Otro tipo';
             default: return 'Tipo de mudanza';
         }
