@@ -1,19 +1,19 @@
 // firebase/boxService.js
 import {
-    collection,
-    deleteDoc,
-    doc,
-    getDocs,
-    orderBy,
-    query,
-    updateDoc
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  orderBy,
+  query,
+  updateDoc
 } from 'firebase/firestore';
 import { db } from './auth';
 
 // Obtener todas las cajas de una mudanza (desde la subcolección)
 export const getBoxesByMoveId = async (moveId) => {
   try {
-    console.log('🟡 Buscando cajas para moveId:', moveId);
+    
 
     // Acceder a la subcolección: mudanzas/{moveId}/cajas
     const cajasRef = collection(db, 'mudanzas', moveId, 'cajas');
@@ -24,14 +24,14 @@ export const getBoxesByMoveId = async (moveId) => {
 
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      console.log('📦 Caja encontrada:', data);
+      
       boxesList.push({
         id: doc.id,
         ...data
       });
     });
 
-    console.log('🟢 Total cajas encontradas:', boxesList.length, 'para moveId:', moveId);
+    
     return boxesList;
   } catch (error) {
     console.error('❌ Error getting boxes for move', moveId, ':', error);
@@ -43,7 +43,7 @@ export const getBoxesByMoveId = async (moveId) => {
 // ✅ FUNCIÓN: Obtener TODAS las cajas de TODAS las mudanzas del usuario
 export const getAllUserBoxes = async () => {
   try {
-    console.log('🟡 Buscando todas las cajas del usuario...');
+    
     
     // Primero obtener todas las mudanzas del usuario
     const { getUserMoves } = await import('./moveService');
@@ -77,7 +77,7 @@ export const getAllUserBoxes = async () => {
       }
     }
     
-    console.log('🟢 Total cajas encontradas en todas las mudanzas:', allBoxes.length);
+    
     return allBoxes;
     
   } catch (error) {
@@ -127,7 +127,7 @@ export const updateBox = async (moveId, boxId, boxData) => {
 // ✅ FUNCIÓN: Obtener estadísticas de cajas de una mudanza
 export const getMoveBoxesStats = async (moveId) => {
   try {
-    console.log('🟡 Obteniendo estadísticas de cajas para moveId:', moveId);
+    
     
     const boxes = await getBoxesByMoveId(moveId);
     
@@ -174,7 +174,7 @@ export const getMoveBoxesStats = async (moveId) => {
       }
     });
     
-    console.log('🟢 Estadísticas obtenidas:', stats);
+  
     return stats;
     
   } catch (error) {
@@ -195,7 +195,7 @@ export const getMoveBoxesStats = async (moveId) => {
 // ✅ FUNCIÓN: Obtener estadísticas globales de todas las mudanzas
 export const getUserBoxesStats = async () => {
   try {
-    console.log('🟡 Obteniendo estadísticas globales de cajas del usuario...');
+    
     
     const allBoxes = await getAllUserBoxes();
     
@@ -239,7 +239,7 @@ export const getUserBoxesStats = async () => {
     stats.avgBoxesPerMove = stats.totalMoves > 0 ? (stats.totalBoxes / stats.totalMoves).toFixed(1) : 0;
     stats.avgItemsPerBox = stats.totalBoxes > 0 ? (stats.totalItems / stats.totalBoxes).toFixed(1) : 0;
     
-    console.log('🟢 Estadísticas globales obtenidas:', stats);
+    
     return stats;
     
   } catch (error) {
@@ -262,7 +262,7 @@ export const getUserBoxesStats = async () => {
 // ✅ FUNCIÓN: Buscar cajas por término de búsqueda
 export const searchBoxes = async (searchTerm) => {
   try {
-    console.log('🟡 Buscando cajas con término:', searchTerm);
+    
     
     if (!searchTerm || searchTerm.trim() === '') {
       return [];
@@ -312,7 +312,7 @@ export const searchBoxes = async (searchTerm) => {
       return false;
     });
     
-    console.log('🟢 Cajas encontradas en búsqueda:', filteredBoxes.length);
+    
     return filteredBoxes;
     
   } catch (error) {
@@ -324,7 +324,7 @@ export const searchBoxes = async (searchTerm) => {
 // ✅ FUNCIÓN: Obtener cajas por habitación
 export const getBoxesByRoom = async (room) => {
   try {
-    console.log('🟡 Buscando cajas por habitación:', room);
+    
     
     const allBoxes = await getAllUserBoxes();
     
@@ -332,7 +332,7 @@ export const getBoxesByRoom = async (room) => {
       box.habitacion && box.habitacion.toLowerCase() === room.toLowerCase()
     );
     
-    console.log('🟢 Cajas encontradas para habitación', room, ':', filteredBoxes.length);
+    
     return filteredBoxes;
     
   } catch (error) {
@@ -344,7 +344,7 @@ export const getBoxesByRoom = async (room) => {
 // ✅ FUNCIÓN: Obtener cajas por estado
 export const getBoxesByStatus = async (status) => {
   try {
-    console.log('🟡 Buscando cajas por estado:', status);
+    
     
     const allBoxes = await getAllUserBoxes();
     
@@ -352,7 +352,7 @@ export const getBoxesByStatus = async (status) => {
       box.status && box.status.toLowerCase() === status.toLowerCase()
     );
     
-    console.log('🟢 Cajas encontradas para estado', status, ':', filteredBoxes.length);
+    
     return filteredBoxes;
     
   } catch (error) {

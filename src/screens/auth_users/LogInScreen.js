@@ -198,13 +198,7 @@ export default function LoginScreen({ navigation }) {
   };
 
   const handleForgotPassword = () => {
-    Alert.alert(
-      'Recuperar Contraseña',
-      'Esta funcionalidad estará disponible en la próxima actualización.\n\nMientras tanto, puedes contactar con soporte.',
-      [
-        { text: 'Entendido', style: 'cancel' }
-      ]
-    );
+    navigation.navigate('ForgotPassword');
   };
 
   // Navegar al registro

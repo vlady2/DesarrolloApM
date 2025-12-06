@@ -1,15 +1,15 @@
 // moveService.js
 import {
-    addDoc,
-    collection,
-    deleteDoc,
-    doc,
-    getDoc,
-    getDocs,
-    orderBy,
-    query,
-    updateDoc,
-    where
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDoc,
+  getDocs,
+  orderBy,
+  query,
+  updateDoc,
+  where
 } from 'firebase/firestore';
 import { auth, db } from './auth';
 import { geocodeMoveAddresses } from './geocodingService';
@@ -61,7 +61,7 @@ export const saveMove = async (moveData) => {
     const movesCollection = collection(db, MOVES_COLLECTION);
     const docRef = await addDoc(movesCollection, moveWithUser);
     
-    console.log('🟢 ✅ MUDANZA GUARDADA CON COORDENADAS');
+    
     console.log('📄 ID del documento:', docRef.id);
     
     return { id: docRef.id, ...moveWithUser };
@@ -96,7 +96,7 @@ export const saveMove = async (moveData) => {
 // ✅ FUNCIÓN: Obtener TODOS los elementos del usuario (viajes + mudanzas)
 export const getAllUserItems = async () => {
   try {
-    console.log('🟡 Buscando todos los elementos del usuario...');
+    
     
     // Importar dinámicamente para evitar dependencias circulares
     const { getUserTrips } = await import('./tripService');
@@ -107,8 +107,6 @@ export const getAllUserItems = async () => {
       getUserMoves().catch(() => [])
     ]);
     
-    console.log('📋 Viajes encontrados:', trips.length);
-    console.log('📋 Mudanzas encontradas:', moves.length);
     
     // Combinar y agregar tipo para diferenciar
     const allItems = [
@@ -123,7 +121,7 @@ export const getAllUserItems = async () => {
       return dateB - dateA;
     });
     
-    console.log('🟢 Total elementos encontrados:', allItems.length);
+    
     return allItems;
     
   } catch (error) {
@@ -162,7 +160,7 @@ export const saveBox = async (moveId, boxData) => {
     delete boxWithData.id;
 
     const docRef = await addDoc(boxesRef, boxWithData);
-    console.log('🟢 Caja guardada con ID:', docRef.id);
+    
     
     return { id: docRef.id, ...boxWithData };
   } catch (error) {
@@ -185,7 +183,7 @@ export const saveBox = async (moveId, boxData) => {
 // Obtener todas las cajas de una mudanza
 export const getBoxesByMove = async (moveId) => {
   try {
-    console.log('🟡 Obteniendo cajas para mudanza:', moveId);
+    
 
     const boxesRef = collection(db, MOVES_COLLECTION, moveId, BOXES_SUBCOLLECTION);
     const q = query(boxesRef, orderBy('createdAt', 'desc'));
@@ -197,7 +195,7 @@ export const getBoxesByMove = async (moveId) => {
       boxes.push({ id: doc.id, ...doc.data() });
     });
 
-    console.log('🟢 Cajas obtenidas:', boxes.length);
+    
     return boxes;
   } catch (error) {
     console.error('❌ Error obteniendo cajas:', error);
@@ -217,7 +215,7 @@ export const getUserMoves = async () => {
       throw new Error('Usuario no autenticado');
     }
 
-    console.log('🟡 Obteniendo mudanzas para usuario:', user.uid);
+    
 
     const q = query(
       collection(db, MOVES_COLLECTION),
@@ -232,7 +230,7 @@ export const getUserMoves = async () => {
       moves.push({ id: doc.id, ...doc.data() });
     });
 
-    console.log('🟢 Mudanzas obtenidas:', moves.length);
+    
     return moves;
   } catch (error) {
     console.error('❌ Error obteniendo mudanzas:', error);
@@ -248,7 +246,7 @@ export const getUserMoves = async () => {
 // Actualizar una mudanza existente
 export const updateMove = async (moveId, moveData) => {
   try {
-    console.log('🟡 Actualizando mudanza:', moveId);
+    
     
     // Si se actualizan las direcciones, geocodificar nuevamente
     let coordinatesToUpdate = {};
@@ -274,7 +272,7 @@ export const updateMove = async (moveId, moveData) => {
       updatedAt: new Date()
     });
     
-    console.log('🟢 Mudanza actualizada correctamente con coordenadas');
+    
   } catch (error) {
     console.error('❌ Error actualizando mudanza:', error);
     throw error;
@@ -284,7 +282,7 @@ export const updateMove = async (moveId, moveData) => {
 // Eliminar una mudanza
 export const deleteMove = async (moveId) => {
   try {
-    console.log('🟡 Eliminando mudanza:', moveId);
+    
     
     const moveRef = doc(db, MOVES_COLLECTION, moveId);
     await deleteDoc(moveRef);
@@ -299,13 +297,13 @@ export const deleteMove = async (moveId) => {
 // Obtener una mudanza específica
 export const getMoveById = async (moveId) => {
   try {
-    console.log('🟡 Obteniendo mudanza:', moveId);
+    
     
     const moveRef = doc(db, MOVES_COLLECTION, moveId);
     const moveDoc = await getDoc(moveRef);
     
     if (moveDoc.exists()) {
-      console.log('🟢 Mudanza encontrada');
+      
       return { id: moveDoc.id, ...moveDoc.data() };
     } else {
       console.log('❌ Mudanza no encontrada');
@@ -353,13 +351,13 @@ export const deleteBox = async (moveId, boxId) => {
 // Obtener una caja específica
 export const getBoxById = async (moveId, boxId) => {
   try {
-    console.log('🟡 Obteniendo caja:', boxId, 'de mudanza:', moveId);
+    
     
     const boxRef = doc(db, MOVES_COLLECTION, moveId, BOXES_SUBCOLLECTION, boxId);
     const boxDoc = await getDoc(boxRef);
     
     if (boxDoc.exists()) {
-      console.log('🟢 Caja encontrada');
+      
       return { id: boxDoc.id, ...boxDoc.data() };
     } else {
       console.log('❌ Caja no encontrada');
@@ -395,7 +393,7 @@ export const checkFirestoreConnection = async () => {
 // Obtener estadísticas de una mudanza (contar cajas, etc.)
 export const getMoveStats = async (moveId) => {
   try {
-    console.log('🟡 Obteniendo estadísticas para mudanza:', moveId);
+    
     
     // Obtener las cajas de la mudanza
     const boxes = await getBoxesByMove(moveId);
@@ -435,7 +433,7 @@ export const getMoveStats = async (moveId) => {
       }
     });
     
-    console.log('🟢 Estadísticas obtenidas:', stats);
+    
     return stats;
   } catch (error) {
     console.error('❌ Error obteniendo estadísticas:', error);

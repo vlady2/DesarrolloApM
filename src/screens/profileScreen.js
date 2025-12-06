@@ -1,22 +1,25 @@
+// ProfileScreen.js - VERSIÓN CORREGIDA (MUDANZAS ARREGLADO)
 import * as Haptics from 'expo-haptics';
 import { LinearGradient } from 'expo-linear-gradient';
+import { updateProfile } from 'firebase/auth'; // Para actualizar displayName
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Animated,
-    Dimensions,
-    Modal,
-    Platform,
-    SafeAreaView,
-    StatusBar,
-    StyleSheet,
-    Switch,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View
+  ActivityIndicator,
+  Alert,
+  Animated,
+  Dimensions,
+  Modal,
+  Platform,
+  RefreshControl,
+  SafeAreaView,
+  ScrollView,
+  StatusBar,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { auth, db } from './../../firebase/auth';
@@ -36,7 +39,7 @@ const ProfileScreen = ({ navigation }) => {
     tripsCount: 0,
     memberSince: '',
   });
-  
+
   const [settings, setSettings] = useState({
     notifications: true,
     darkMode: true,
@@ -45,8 +48,9 @@ const ProfileScreen = ({ navigation }) => {
     dataSaver: false,
     biometricLogin: false,
   });
-  
+
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [editing, setEditing] = useState(false);
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [selectedField, setSelectedField] = useState('');
@@ -55,13 +59,20 @@ const ProfileScreen = ({ navigation }) => {
     totalTrips: 0,
     totalMoves: 0,
     totalBoxes: 0,
+    totalLuggage: 0,
     countriesVisited: 0,
     totalWeight: 0,
     savedSpace: 0,
+    tripsCompleted: 0,
+    tripsPlanned: 0,
+    movesActive: 0,
+    movesCompleted: 0,
   });
 
   const scrollY = useRef(new Animated.Value(0)).current;
   const fadeAnim = useRef(new Animated.Value(0)).current;
+  const scrollViewRef = useRef(null);
+
   const headerHeight = scrollY.interpolate({
     inputRange: [0, 150],
     outputRange: [300, 120],
@@ -83,119 +94,262 @@ const ProfileScreen = ({ navigation }) => {
     }).start();
   }, []);
 
-  const loadUserData = async () => {
+  const onScroll = useCallback(
+    Animated.event(
+      [{ nativeEvent: { contentOffset: { y: scrollY } } }],
+      { useNativeDriver: false }
+    ),
+    []
+  );
+
+  const loadUserData = async (forceReload = false) => {
     try {
-      const user = auth.currentUser;
-      if (user) {
-        // Datos básicos de Auth
-        setUserData(prev => ({
-          ...prev,
-          name: user.displayName || 'Viajero',
-          email: user.email || '',
-          memberSince: user.metadata.creationTime || new Date().toLocaleDateString(),
-        }));
-
-        // Cargar datos adicionales de Firestore
-        const userDoc = await getDoc(doc(db, 'users', user.uid));
-        if (userDoc.exists()) {
-          const data = userDoc.data();
-          setUserData(prev => ({
-            ...prev,
-            phone: data.phone || '',
-            location: data.location || '',
-            bio: data.bio || 'Apasionado viajero ✈️',
-            travelStyle: data.travelStyle || 'Aventurero',
-            preferredAirline: data.preferredAirline || 'No especificada',
-            luggageCount: data.boxes?.length || 0,
-            tripsCount: data.trips?.length || 0,
-          }));
-
-          // Cargar configuración
-          if (data.settings) {
-            setSettings(data.settings);
-          }
-
-          // Calcular estadísticas
-          calculateStats(data);
-        }
+      if (forceReload) {
+        setRefreshing(true);
+      } else {
+        setLoading(true);
       }
+
+      const user = auth.currentUser;
+      if (!user) {
+        navigation.navigate('Login');
+        return;
+      }
+
+      // 🔹 Datos básicos de Auth
+      const basicData = {
+        name: user.displayName || 'Viajero',
+        email: user.email || '',
+        memberSince: user.metadata.creationTime || new Date().toLocaleDateString(),
+      };
+
+      // 🔹 Cargar datos adicionales de Firestore
+      const userDoc = await getDoc(doc(db, 'users', user.uid));
+      let userDocData = {};
+
+      if (userDoc.exists()) {
+        userDocData = userDoc.data();
+      }
+
+      const mergedData = {
+        ...userData,
+        ...basicData,
+        phone: userDocData.phone || '',
+        location: userDocData.location || '',
+        bio: userDocData.bio || 'Apasionado viajero ✈️',
+        travelStyle: userDocData.travelStyle || 'Aventurero',
+        preferredAirline: userDocData.preferredAirline || 'No especificada',
+        luggageCount: userDocData.boxes?.length || 0,
+        tripsCount: userDocData.trips?.length || 0,
+      };
+
+      setUserData(mergedData);
+
+      // 🔹 Cargar configuración
+      if (userDocData.settings) {
+        setSettings(userDocData.settings);
+      }
+
+      // 🔹 Calcular estadísticas REALES
+      await calculateRealStats(user.uid);
+
     } catch (error) {
-      console.log('Error loading user data:', error);
+      console.error('❌ Error cargando datos del usuario:', error);
+      Alert.alert('Error', 'No se pudieron cargar los datos del perfil');
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
-  const calculateStats = (data) => {
-    const trips = data.trips || [];
-    const boxes = data.boxes || [];
-    const moves = data.moves || [];
-    
-    let totalWeight = 0;
-    let savedSpace = 0;
-    let countries = new Set();
-    
-    boxes.forEach(box => {
-      totalWeight += box.weight || 0;
-      savedSpace += box.savedSpace || 0;
-    });
-    
-    trips.forEach(trip => {
-      if (trip.destination) countries.add(trip.destination);
-    });
-    
-    setStats({
-      totalTrips: trips.length,
-      totalMoves: moves.length,
-      totalBoxes: boxes.length,
-      countriesVisited: countries.size,
-      totalWeight: Math.round(totalWeight),
-      savedSpace: Math.round(savedSpace),
-    });
+  // ✅ FUNCIÓN CORREGIDA: Calcular estadísticas REALES desde Firestore
+  const calculateRealStats = async (userId) => {
+    try {
+      // Importar servicios necesarios
+      const { getUserTrips } = require('../../firebase/tripService');
+      const { getAllUserBoxes } = require('../../firebase/boxService');
+      const { getUserMoves } = require('../../firebase/moveService');
+      const { getAllUserLuggage } = require('../../firebase/luggageService');
+
+      // Obtener datos reales en paralelo
+      const [userTrips, userBoxes, userMoves, userLuggage] = await Promise.all([
+        getUserTrips().catch(() => []),
+        getAllUserBoxes().catch(() => []),
+        getUserMoves().catch(() => []),
+        getAllUserLuggage().catch(() => [])
+      ]);
+
+      console.log('📊 Datos obtenidos:', {
+        viajes: userTrips.length,
+        cajas: userBoxes.length,
+        mudanzas: userMoves.length,
+        maletas: userLuggage.length
+      });
+
+      // Calcular viajes completados
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+
+      const tripsCompleted = userTrips.filter(trip => {
+        if (!trip.endDate) return false;
+
+        let endDate;
+        try {
+          if (trip.endDate.includes('/')) {
+            const [day, month, year] = trip.endDate.split('/');
+            endDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          } else {
+            endDate = new Date(trip.endDate);
+          }
+          endDate.setHours(0, 0, 0, 0);
+
+          return endDate < today;
+        } catch (error) {
+          return false;
+        }
+      }).length;
+
+      // ✅ NUEVO: Calcular mudanzas activas y completadas
+      const currentDate = new Date();
+      let movesActive = 0;
+      let movesCompleted = 0;
+
+      userMoves.forEach(move => {
+        if (!move.moveDate) {
+          // Si no tiene fecha, se considera planificada (activa)
+          movesActive++;
+          return;
+        }
+
+        try {
+          let moveDate;
+          if (move.moveDate.includes('/')) {
+            const [day, month, year] = move.moveDate.split('/');
+            moveDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+          } else {
+            moveDate = new Date(move.moveDate);
+          }
+          moveDate.setHours(0, 0, 0, 0);
+
+          if (moveDate < currentDate) {
+            movesCompleted++;
+          } else {
+            movesActive++;
+          }
+        } catch (error) {
+          console.log('❌ Error procesando fecha de mudanza:', error);
+          movesActive++; // Por defecto, considerar activa
+        }
+      });
+
+      // Calcular peso total real (de cajas)
+      let totalWeight = 0;
+      userBoxes.forEach(box => {
+        totalWeight += parseFloat(box.peso) || 0;
+      });
+
+      // Calcular países visitados
+      const countries = new Set();
+      userTrips.forEach(trip => {
+        if (trip.destination) {
+          const country = trip.destination.split(',').pop()?.trim();
+          if (country) countries.add(country);
+        }
+      });
+
+      setStats({
+        totalTrips: userTrips.length,
+        totalMoves: userMoves.length,
+        totalBoxes: userBoxes.length,
+        totalLuggage: userLuggage.length,
+        countriesVisited: countries.size,
+        totalWeight: Math.round(totalWeight),
+        savedSpace: Math.round(totalWeight * 0.3), // Estimación
+        tripsCompleted,
+        tripsPlanned: userTrips.length - tripsCompleted,
+        movesActive,
+        movesCompleted,
+      });
+
+    } catch (error) {
+      console.error('❌ Error calculando estadísticas:', error);
+    }
   };
 
   const handleEditField = (field, value) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     setSelectedField(field);
-    setEditValue(value);
+    setEditValue(value || '');
     setEditModalVisible(true);
   };
 
   const saveField = async () => {
     try {
       const user = auth.currentUser;
-      if (!user) return;
+      if (!user) {
+        Alert.alert('Error', 'Usuario no autenticado');
+        return;
+      }
 
-      const updates = {};
       const fieldMap = {
-        name: 'displayName',
-        phone: 'phone',
-        location: 'location',
-        bio: 'bio',
-        travelStyle: 'travelStyle',
-        preferredAirline: 'preferredAirline',
+        name: {
+          firestoreField: 'displayName',
+          authUpdate: true,
+          label: 'Nombre'
+        },
+        bio: {
+          firestoreField: 'bio',
+          authUpdate: false,
+          label: 'Bio'
+        },
+        travelStyle: {
+          firestoreField: 'travelStyle',
+          authUpdate: false,
+          label: 'Estilo de viaje'
+        },
+        
       };
 
-      if (selectedField === 'name') {
-        // Actualizar en Auth
-        // Note: Para actualizar displayName necesitas importar updateProfile
-        // y hacer: await updateProfile(user, { displayName: editValue });
+      const fieldConfig = fieldMap[selectedField];
+      if (!fieldConfig) {
+        console.error('Campo no reconocido:', selectedField);
+        return;
       }
 
-      // Actualizar en Firestore
-      const firestoreField = fieldMap[selectedField];
-      if (firestoreField) {
-        updates[firestoreField] = editValue;
-        await updateDoc(doc(db, 'users', user.uid), updates);
-        
-        // Actualizar estado local
-        setUserData(prev => ({ ...prev, [selectedField]: editValue }));
-        
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        Alert.alert('✅ Guardado', 'Cambios actualizados correctamente');
+      // 🔹 Actualizar en Auth si es necesario (para displayName)
+      if (fieldConfig.authUpdate && selectedField === 'name') {
+        try {
+          await updateProfile(user, { displayName: editValue });
+        } catch (authError) {
+          console.error('Error actualizando Auth:', authError);
+        }
       }
+
+      // 🔹 Actualizar en Firestore
+      const updates = {};
+      updates[fieldConfig.firestoreField] = editValue;
+      updates.updatedAt = new Date();
+
+      await updateDoc(doc(db, 'users', user.uid), updates);
+
+      // 🔹 Actualizar estado local inmediatamente
+      setUserData(prev => ({
+        ...prev,
+        [selectedField]: editValue
+      }));
+
+      // 🔹 Forzar recarga de datos para asegurar consistencia
+      setTimeout(() => {
+        loadUserData(true);
+      }, 500);
+
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('✅ Guardado', 'Cambios actualizados correctamente');
 
       setEditModalVisible(false);
+
     } catch (error) {
+      console.error('❌ Error guardando cambios:', error);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('❌ Error', 'No se pudo guardar los cambios');
     }
@@ -208,8 +362,8 @@ const ProfileScreen = ({ navigation }) => {
       '¿Estás seguro de que quieres cerrar sesión?',
       [
         { text: 'Cancelar', style: 'cancel' },
-        { 
-          text: 'Cerrar Sesión', 
+        {
+          text: 'Cerrar Sesión',
           style: 'destructive',
           onPress: async () => {
             try {
@@ -227,44 +381,13 @@ const ProfileScreen = ({ navigation }) => {
     );
   };
 
-  const toggleSetting = (setting) => {
-    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    setSettings(prev => ({
-      ...prev,
-      [setting]: !prev[setting]
-    }));
-  };
-
-  const StatCard = ({ icon, value, label, color }) => (
+  const StatCard = ({ icon, value, label, color, subLabel }) => (
     <View style={[styles.statCard, { borderLeftColor: color }]}>
       <Text style={styles.statIcon}>{icon}</Text>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
+      {subLabel && <Text style={styles.statSubLabel}>{subLabel}</Text>}
     </View>
-  );
-
-  const SettingItem = ({ icon, title, description, value, onToggle, color }) => (
-    <TouchableOpacity 
-      style={styles.settingItem}
-      onPress={() => onToggle && onToggle()}
-      activeOpacity={0.7}
-    >
-      <View style={[styles.settingIcon, { backgroundColor: color + '20' }]}>
-        <Ionicons name={icon} size={22} color={color} />
-      </View>
-      <View style={styles.settingTextContainer}>
-        <Text style={styles.settingTitle}>{title}</Text>
-        <Text style={styles.settingDescription}>{description}</Text>
-      </View>
-      {onToggle && (
-        <Switch
-          value={value}
-          onValueChange={onToggle}
-          trackColor={{ false: '#475569', true: color }}
-          thumbColor="#FFFFFF"
-        />
-      )}
-    </TouchableOpacity>
   );
 
   const ProfileField = ({ icon, label, value, editable = false, fieldName = '' }) => (
@@ -272,6 +395,7 @@ const ProfileScreen = ({ navigation }) => {
       style={styles.profileField}
       onPress={() => editable && handleEditField(fieldName, value)}
       activeOpacity={editable ? 0.7 : 1}
+      disabled={!editable}
     >
       <View style={styles.fieldHeader}>
         <View style={styles.fieldIconContainer}>
@@ -282,9 +406,15 @@ const ProfileScreen = ({ navigation }) => {
           <Ionicons name="pencil" size={16} color="#94A3B8" style={styles.editIcon} />
         )}
       </View>
-      <Text style={styles.fieldValue} numberOfLines={2}>{value || 'No especificado'}</Text>
+      <Text style={styles.fieldValue} numberOfLines={2}>
+        {value || 'No especificado'}
+      </Text>
     </TouchableOpacity>
   );
+
+  const onRefresh = useCallback(() => {
+    loadUserData(true);
+  }, []);
 
   if (loading) {
     return (
@@ -298,7 +428,7 @@ const ProfileScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.safeArea}>
       <StatusBar barStyle="light-content" backgroundColor="#0F172A" />
-      
+
       <LinearGradient
         colors={['#0F172A', '#1E293B', '#334155']}
         style={styles.gradientBackground}
@@ -347,24 +477,35 @@ const ProfileScreen = ({ navigation }) => {
                 </View>
                 <View style={styles.badge}>
                   <Ionicons name="calendar" size={14} color="#60A5FA" />
-                  <Text style={styles.badgeText}>Miembro desde {new Date(userData.memberSince).getFullYear()}</Text>
+                  <Text style={styles.badgeText}>
+                    Miembro desde {new Date(userData.memberSince).getFullYear()}
+                  </Text>
                 </View>
               </View>
             </Animated.View>
           </LinearGradient>
         </Animated.View>
 
-        <Animated.ScrollView
+        <ScrollView
+          ref={scrollViewRef}
           style={styles.scrollView}
-          onScroll={Animated.event(
-            [{ nativeEvent: { contentOffset: { y: scrollY } } }],
-            { useNativeDriver: false }
-          )}
+          onScroll={onScroll}
           scrollEventThrottle={16}
           showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={refreshing}
+              onRefresh={onRefresh}
+              colors={['#60A5FA']}
+              tintColor="#60A5FA"
+            />
+          }
+          contentContainerStyle={styles.scrollContent}
+          bounces={true}
+          overScrollMode="always"
         >
           <Animated.View style={[styles.contentContainer, { opacity: fadeAnim }]}>
-            
+
             {/* BIO CARD */}
             <View style={styles.bioCard}>
               <LinearGradient
@@ -374,7 +515,7 @@ const ProfileScreen = ({ navigation }) => {
                 <View style={styles.bioHeader}>
                   <Ionicons name="sparkles" size={24} color="#60A5FA" />
                   <Text style={styles.bioTitle}>Sobre Mí</Text>
-                  <TouchableOpacity 
+                  <TouchableOpacity
                     style={styles.editBioButton}
                     onPress={() => handleEditField('bio', userData.bio)}
                   >
@@ -391,14 +532,59 @@ const ProfileScreen = ({ navigation }) => {
               </LinearGradient>
             </View>
 
-            {/* STATS GRID */}
+            {/* STATS GRID - DATOS REALES CORREGIDOS */}
             <View style={styles.statsSection}>
               <Text style={styles.sectionTitle}>Mis Estadísticas</Text>
               <View style={styles.statsGrid}>
-                <StatCard icon="✈️" value={stats.totalTrips} label="Viajes" color="#3B82F6" />
-                <StatCard icon="📦" value={stats.totalBoxes} label="Maletas" color="#10B981" />
-                <StatCard icon="🏠" value={stats.totalMoves} label="Mudanzas" color="#8B5CF6" />
-                <StatCard icon="⚖️" value={`${stats.totalWeight}kg`} label="Peso Total" color="#EF4444" />
+                {/* Viajes */}
+                <StatCard
+                  icon="✈️"
+                  value={stats.totalTrips}
+                  label="Viajes"
+                  color="#3B82F6"
+                  subLabel={`${stats.tripsCompleted} completados`}
+                />
+
+                {/* Cajas (de mudanzas) */}
+                <StatCard
+                  icon="📦"
+                  value={stats.totalBoxes}
+                  label="Cajas"
+                  color="#10B981"
+                />
+
+                {/* Maletas (de viajes) */}
+                <StatCard
+                  icon="🛄"
+                  value={stats.totalLuggage}
+                  label="Maletas"
+                  color="#8B5CF6"
+                />
+
+                {/* Mudanzas */}
+                <StatCard
+                  icon="🏠"
+                  value={stats.totalMoves}
+                  label="Mudanzas"
+                  color="#F59E0B"
+                  subLabel={`${stats.movesActive} activas`}
+                />
+
+                {/* Peso Total */}
+                <StatCard
+                  icon="⚖️"
+                  value={`${stats.totalWeight}kg`}
+                  label="Peso Total"
+                  color="#EF4444"
+                />
+
+                {/* Países */}
+                <StatCard
+                  icon="🌎"
+                  value={stats.countriesVisited}
+                  label="Países"
+                  color="#EC4899"
+                />
               </View>
             </View>
 
@@ -406,48 +592,51 @@ const ProfileScreen = ({ navigation }) => {
             <View style={styles.infoSection}>
               <View style={styles.sectionHeader}>
                 <Text style={styles.sectionTitle}>Información Personal</Text>
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={styles.editAllButton}
-                  onPress={() => setEditing(!editing)}
+                  onPress={() => {
+                    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                    setEditing(!editing);
+                  }}
                 >
-                  <Ionicons name={editing ? "checkmark" : "pencil"} size={20} color="#60A5FA" />
+                  <Ionicons
+                    name={editing ? "checkmark" : "pencil"}
+                    size={20}
+                    color="#60A5FA"
+                  />
                   <Text style={styles.editAllText}>
                     {editing ? 'Listo' : 'Editar'}
                   </Text>
                 </TouchableOpacity>
               </View>
-              
+
               <View style={styles.profileGrid}>
-                <ProfileField 
+                <ProfileField
                   icon="person"
                   label="Nombre"
                   value={userData.name}
                   editable={editing}
                   fieldName="name"
                 />
-                <ProfileField 
+                <ProfileField
                   icon="mail"
                   label="Email"
                   value={userData.email}
                   editable={false}
-                  
                 />
-                
-                <ProfileField 
+                <ProfileField
                   icon="trail-sign"
                   label="Estilo de Viaje"
                   value={userData.travelStyle}
                   editable={editing}
                   fieldName="travelStyle"
                 />
+               
               </View>
             </View>
 
-           
-
-
             {/* LOGOUT BUTTON */}
-            <TouchableOpacity 
+            <TouchableOpacity
               style={styles.logoutButton}
               onPress={handleLogout}
               activeOpacity={0.7}
@@ -469,7 +658,7 @@ const ProfileScreen = ({ navigation }) => {
               <Text style={styles.versionText}>Versión 2.5.1 • TravelTech Labs</Text>
             </View>
           </Animated.View>
-        </Animated.ScrollView>
+        </ScrollView>
 
         {/* MODAL PARA EDITAR */}
         <Modal
@@ -486,25 +675,34 @@ const ProfileScreen = ({ navigation }) => {
               >
                 <View style={styles.modalHeader}>
                   <Text style={styles.modalTitle}>
-                    Editar {selectedField === 'name' ? 'Nombre'    :
-                           'Aerolínea Preferida'}
+                    {selectedField === 'name' ? 'Editar Nombre' :
+                      selectedField === 'bio' ? 'Editar Bio' :
+                        selectedField === 'travelStyle' ? 'Editar Estilo de Viaje' :
+                          'Editar Aerolínea Preferida'}
                   </Text>
-                  <TouchableOpacity onPress={() => setEditModalVisible(false)}>
+                  <TouchableOpacity
+                    onPress={() => setEditModalVisible(false)}
+                    hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+                  >
                     <Ionicons name="close" size={28} color="#FFFFFF" />
                   </TouchableOpacity>
                 </View>
-                
+
                 <TextInput
-                  style={styles.modalInput}
+                  style={[
+                    styles.modalInput,
+                    selectedField === 'bio' && styles.modalInputMultiline
+                  ]}
                   value={editValue}
                   onChangeText={setEditValue}
                   multiline={selectedField === 'bio'}
                   numberOfLines={selectedField === 'bio' ? 4 : 1}
-                  placeholder={`Ingresa tu ${selectedField}`}
+                  placeholder={`Ingresa tu ${selectedField === 'name' ? 'nombre' : selectedField === 'bio' ? 'descripción personal' : selectedField}`}
                   placeholderTextColor="#94A3B8"
                   autoFocus
+                  autoCapitalize={selectedField === 'name' ? 'words' : 'sentences'}
                 />
-                
+
                 <View style={styles.modalButtons}>
                   <TouchableOpacity
                     style={[styles.modalButton, styles.cancelButton]}
@@ -512,7 +710,7 @@ const ProfileScreen = ({ navigation }) => {
                   >
                     <Text style={styles.cancelButtonText}>Cancelar</Text>
                   </TouchableOpacity>
-                  
+
                   <TouchableOpacity
                     style={[styles.modalButton, styles.saveButton]}
                     onPress={saveField}
@@ -648,6 +846,9 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  scrollContent: {
+    flexGrow: 1,
+  },
   contentContainer: {
     padding: 24,
     paddingTop: 140,
@@ -717,31 +918,38 @@ const styles = StyleSheet.create({
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
   },
   statCard: {
     width: '31%',
     backgroundColor: 'rgba(30, 41, 59, 0.6)',
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 16,
+    padding: 16,
     borderLeftWidth: 4,
-    borderLeftColor: '#3B82F6',
     alignItems: 'center',
+    marginBottom: 12,
   },
   statIcon: {
     fontSize: 24,
-    marginBottom: 12,
+    marginBottom: 8,
   },
   statValue: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '900',
     color: '#FFFFFF',
     marginBottom: 4,
   },
   statLabel: {
-    fontSize: 12,
+    fontSize: 11,
     color: '#94A3B8',
     textAlign: 'center',
+    marginBottom: 2,
+  },
+  statSubLabel: {
+    fontSize: 9,
+    color: '#64748B',
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   infoSection: {
     marginBottom: 40,
@@ -769,7 +977,7 @@ const styles = StyleSheet.create({
   profileGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 16,
+    gap: 12,
   },
   profileField: {
     width: '48%',
@@ -807,73 +1015,6 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '600',
     lineHeight: 20,
-  },
-  settingsSection: {
-    marginBottom: 40,
-  },
-  settingsList: {
-    gap: 12,
-  },
-  settingItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(30, 41, 59, 0.6)',
-    borderRadius: 16,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: 'rgba(255, 255, 255, 0.1)',
-  },
-  settingIcon: {
-    width: 44,
-    height: 44,
-    borderRadius: 12,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  settingTextContainer: {
-    flex: 1,
-  },
-  settingTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  settingDescription: {
-    fontSize: 12,
-    color: '#94A3B8',
-    lineHeight: 16,
-  },
-  actionsSection: {
-    marginBottom: 40,
-  },
-  actionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 16,
-  },
-  actionCard: {
-    width: '48%',
-    borderRadius: 20,
-    overflow: 'hidden',
-  },
-  actionGradient: {
-    padding: 20,
-    alignItems: 'center',
-  },
-  actionTitle: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#FFFFFF',
-    marginTop: 12,
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  actionCount: {
-    fontSize: 12,
-    color: '#94A3B8',
-    textAlign: 'center',
   },
   logoutButton: {
     borderRadius: 16,
@@ -945,6 +1086,9 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(255, 255, 255, 0.2)',
     minHeight: 50,
+  },
+  modalInputMultiline: {
+    minHeight: 100,
     textAlignVertical: 'top',
   },
   modalButtons: {

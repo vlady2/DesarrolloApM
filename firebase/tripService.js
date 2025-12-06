@@ -63,7 +63,7 @@ export const saveTrip = async (tripData) => {
     
     const docRef = await addDoc(tripsCollection, tripWithUser);
     
-    console.log('🟢 ✅ VIAJE GUARDADO CON COORDENADAS');
+    
     console.log('📄 ID del documento:', docRef.id);
     
     return { id: docRef.id, ...tripWithUser };
@@ -123,7 +123,7 @@ export const saveMaleta = async (tripId, maletaData) => {
     delete maletaConData.id;
 
     const docRef = await addDoc(maletasRef, maletaConData);
-    console.log('🟢 Maleta guardada con ID:', docRef.id);
+    
     
     return { id: docRef.id, ...maletaConData };
   } catch (error) {
@@ -146,7 +146,7 @@ export const saveMaleta = async (tripId, maletaData) => {
 // Obtener todas las maletas de un viaje
 export const getMaletasByTrip = async (tripId) => {
   try {
-    console.log('🟡 Obteniendo maletas para viaje:', tripId);
+    
 
     const maletasRef = collection(db, 'trips', tripId, 'maletas');
     const q = query(maletasRef, orderBy('createdAt', 'desc'));
@@ -158,7 +158,7 @@ export const getMaletasByTrip = async (tripId) => {
       maletas.push({ id: doc.id, ...doc.data() });
     });
 
-    console.log('🟢 Maletas obtenidas:', maletas.length);
+    
     return maletas;
   } catch (error) {
     console.error('❌ Error obteniendo maletas:', error);
@@ -178,7 +178,7 @@ export const getUserTrips = async () => {
       throw new Error('Usuario no autenticado');
     }
 
-    console.log('🟡 Obteniendo viajes para usuario:', user.uid);
+    
 
     const q = query(
       collection(db, TRIPS_COLLECTION),
@@ -193,7 +193,7 @@ export const getUserTrips = async () => {
       trips.push({ id: doc.id, ...doc.data() });
     });
 
-    console.log('🟢 Viajes obtenidos:', trips.length);
+    
     return trips;
   } catch (error) {
     console.error('❌ Error obteniendo viajes:', error);
@@ -231,7 +231,7 @@ export const updateTrip = async (tripId, tripData) => {
       updatedAt: new Date()
     });
     
-    console.log('🟢 Viaje actualizado correctamente con coordenadas');
+    
   } catch (error) {
     console.error('❌ Error actualizando viaje:', error);
     throw error;
@@ -256,13 +256,13 @@ export const deleteTrip = async (tripId) => {
 // Obtener un viaje específico
 export const getTripById = async (tripId) => {
   try {
-    console.log('🟡 Obteniendo viaje:', tripId);
+    
     
     const tripRef = doc(db, TRIPS_COLLECTION, tripId);
     const tripDoc = await getDoc(tripRef);
     
     if (tripDoc.exists()) {
-      console.log('🟢 Viaje encontrado');
+      
       return { id: tripDoc.id, ...tripDoc.data() };
     } else {
       console.log('❌ Viaje no encontrado');
