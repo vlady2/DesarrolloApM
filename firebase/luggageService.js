@@ -13,7 +13,7 @@ import { db } from './auth';
 // Obtener todas las maletas de un viaje (desde la subcolección)
 export const getLuggageByTripId = async (tripId) => {
   try {
-    console.log('🟡 Buscando maletas para tripId:', tripId);
+    
 
     // Acceder a la subcolección: trips/{tripId}/maletas
     const maletasRef = collection(db, 'trips', tripId, 'maletas');
@@ -24,14 +24,14 @@ export const getLuggageByTripId = async (tripId) => {
 
     querySnapshot.forEach((doc) => {
       const data = doc.data();
-      console.log('📦 Maleta encontrada:', data);
+      
       luggageList.push({
         id: doc.id,
         ...data
       });
     });
 
-    console.log('🟢 Total maletas encontradas:', luggageList.length, 'para tripId:', tripId);
+    
     return luggageList;
   } catch (error) {
     console.error('❌ Error getting luggage for trip', tripId, ':', error);
@@ -43,7 +43,7 @@ export const getLuggageByTripId = async (tripId) => {
 // ✅ NUEVA FUNCIÓN: Obtener TODAS las maletas de TODOS los viajes del usuario
 export const getAllUserLuggage = async () => {
   try {
-    console.log('🟡 Buscando todas las maletas del usuario...');
+    
     
     // Primero obtener todos los viajes del usuario
     const { getUserTrips } = await import('./tripService');

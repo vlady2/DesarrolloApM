@@ -86,13 +86,13 @@ const HelpSoportScreen = ({ navigation }) => {
     {
       id: 4,
       question: '¿Puedo compartir mis listas con otros?',
-      answer: 'No,aun no puedes compartir tu lista de equipajes con otros amigos',
+      answer: 'No, aún no puedes compartir tu lista de equipajes con otros amigos',
       category: 6
     },
     {
       id: 5,
       question: '¿Cómo añado un nuevo viaje?',
-      answer: '1. Toca "NUEVO" en la pantalla principal\n2. Selecciona "Viaje"\n3. Ingresa destino, fechas y Motivo de viaje\n4. Agrega maletas y articulos\n5. Configura alertas y recordatorios',
+      answer: '1. Toca "NUEVO" en la pantalla principal\n2. Selecciona "Viaje"\n3. Ingresa destino, fechas y Motivo de viaje\n4. Agrega maletas y articulos\n5. Guarda para iniciar la organización de tu viaje',
       category: 2
     },
     {

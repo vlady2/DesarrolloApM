@@ -11,14 +11,17 @@ import { auth } from './firebase/auth';
 import LoadingScreen from './src/components/LoadingScreen';
 
 // Auth Screens
+import ForgotPasswordScreen from './src/screens/auth_users/ForgotPasswordScreen';
 import LoginScreen from './src/screens/auth_users/LogInScreen';
 import RegisterScreen from './src/screens/auth_users/RegisterScreen';
+import ResetPasswordConfirmScreen from './src/screens/auth_users/ResetPasswordConfirmScreen';
 
 // Main Screens
 import AboutScreen from './src/screens/AboutScreen';
 import ArticulosProhibidosScreen from './src/screens/ArticulosProhibidosScreen';
 import EditMoveScreen from './src/screens/EditMoveScreen';
 import EditTripScreen from './src/screens/EditTripScreen';
+import EmailVerificationModal from './src/screens/EmailVerificationModal';
 import HelpSoportScreen from './src/screens/HelpSoportScreen';
 import HomeScreen from './src/screens/HomeScreen';
 import MaletasScreen from './src/screens/Maletascreen';
@@ -30,6 +33,7 @@ import NewBoxScreen from './src/screens/NewBoxScreen';
 import NewMaletaScreen from './src/screens/NewMaletaScreen';
 import NewMoveScreen from './src/screens/NewMoveScreen';
 import NewTripScreen from './src/screens/NewTripScreen';
+import PrivacyScreen from './src/screens/PrivacyScreen';
 import ProfileScreen from './src/screens/ProfileScreen';
 import SettingScreen from './src/screens/SettingScreen';
 import TripDetailScreen from './src/screens/TripDetailScreen';
@@ -172,6 +176,28 @@ export default function App() {
           component={ProfileScreen}
           options={{ headerShown: false }}
         />
+        <Stack.Screen
+          name="PrivacyScreen"
+          component={PrivacyScreen}
+          options={{ headerShown: false }}
+        />
+        
+      <Stack.Screen
+          name="ForgotPassword"
+          component={ForgotPasswordScreen}
+          options={{headerShown: false}}
+        />
+        <Stack.Screen
+          name="ResetPasswordConfirm"
+          component={ResetPasswordConfirmScreen}
+          options={{ headerShown: false }}
+        />
+        <Stack.Screen
+          name="EmailVerification"
+          component={EmailVerificationModal}
+          options={{ headerShown: false }}
+        />
+        
       </Stack.Navigator>
     </NavigationContainer>
   );

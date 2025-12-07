@@ -1,4 +1,4 @@
-// MoveDetailScreen.js
+// MoveDetailScreen.js - VERSIÓN CORREGIDA
 import { useEffect, useState } from 'react';
 import {
     Alert,
@@ -14,11 +14,27 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { getBoxesByMoveId } from '../../firebase/boxService';
-import { deleteMove } from '../../firebase/moveService';
+import { deleteBox, getBoxesByMoveId } from '../../firebase/boxService';
+import { deleteMove, getMoveById } from '../../firebase/moveService';
 
-// ✅ FUNCIÓN: Verificar estado de la mudanza con permisos
-const getMoveStatus = (move) => {
+// ✅ FUNCIÓN AUXILIAR: Verificar si una caja tiene items válidos
+const hasBoxValidItems = (box) => {
+    const items = box.items;
+    if (!items) return false;
+    
+    if (Array.isArray(items) && items.length > 0) {
+        return true;
+    } else if (typeof items === 'string' && items.trim() !== '') {
+        return true;
+    } else if (typeof items === 'object' && items !== null) {
+        return Object.keys(items).length > 0;
+    }
+    return false;
+};
+
+// ✅ FUNCIÓN CENTRAL MEJORADA: Verificar estado de la mudanza con permisos
+const getMoveStatus = (move, boxes = []) => {
+    // Si no hay fecha de mudanza, está planificada
     if (!move.moveDate) {
         return {
             status: 'Planificada',
@@ -68,11 +84,31 @@ const getMoveStatus = (move) => {
     const todayStr = today.toDateString();
     const moveDateStr = moveDate.toDateString();
 
+    // ✅ Verificar si hay cajas con items
+    const boxesWithItems = boxes.filter(box => hasBoxValidItems(box)).length;
+    const totalBoxes = boxes.length;
+    
+    // Si no hay cajas o todas están vacías
+    const hasNoBoxesAtAll = totalBoxes === 0;
+    const hasEmptyBoxes = totalBoxes > 0 && boxesWithItems === 0;
+    
+    // 🟡 HOY: Mudanza en curso
     if (todayStr === moveDateStr) {
+        if (hasNoBoxesAtAll || hasEmptyBoxes) {
+            return {
+                status: 'Fallida',
+                color: hasEmptyBoxes ? '#FF9800' : '#DC3545',
+                icon: hasEmptyBoxes ? 'alert-circle' : 'close-circle',
+                canEdit: false,
+                canDelete: false,
+                canEditBoxes: true, // Puede agregar cajas para intentar recuperar
+                canDeleteBoxes: true
+            };
+        }
         return {
-            status: 'Hoy',
-            color: '#F44336',
-            icon: 'warning',
+            status: 'En curso',
+            color: '#4CAF50',
+            icon: 'business',
             canEdit: false,
             canDelete: false,
             canEditBoxes: false,
@@ -80,6 +116,7 @@ const getMoveStatus = (move) => {
         };
     }
 
+    // 📅 FECHA FUTURA: Pendiente
     if (today < moveDate) {
         return {
             status: 'Pendiente',
@@ -92,13 +129,25 @@ const getMoveStatus = (move) => {
         };
     }
 
+    // ✅ FECHA PASADA: Completada o Fallida
     if (today > moveDate) {
+        if (hasNoBoxesAtAll || hasEmptyBoxes) {
+            return {
+                status: 'Fallida',
+                color: hasEmptyBoxes ? '#FF9800' : '#DC3545',
+                icon: hasEmptyBoxes ? 'alert-circle' : 'close-circle',
+                canEdit: false,
+                canDelete: true, // Puede eliminar si ya pasó
+                canEditBoxes: false,
+                canDeleteBoxes: false
+            };
+        }
         return {
             status: 'Completada',
             color: '#888',
             icon: 'checkmark-done',
             canEdit: false,
-            canDelete: false,
+            canDelete: true,
             canEditBoxes: false,
             canDeleteBoxes: false
         };
@@ -116,13 +165,18 @@ const getMoveStatus = (move) => {
 };
 
 const MoveDetailScreen = ({ route, navigation }) => {
-    const { moveId, moveOrigin, moveDestination, moveType } = route.params;
+    const { moveId, moveOrigin, moveDestination, moveType, moveDate: paramMoveDate } = route.params;
+    
+    // ✅ CORREGIDO: Inicializar estado con datos de parámetros
     const [move, setMove] = useState({
         id: moveId,
-        origin: moveOrigin,
-        destination: moveDestination,
-        moveType: moveType
+        origin: moveOrigin || '',
+        destination: moveDestination || '',
+        moveType: moveType || 'residential',
+        moveDate: paramMoveDate || null,
+        notes: ''
     });
+    
     const [boxes, setBoxes] = useState([]);
     const [loading, setLoading] = useState(true);
     const [selectedBox, setSelectedBox] = useState(null);
@@ -148,16 +202,54 @@ const MoveDetailScreen = ({ route, navigation }) => {
         return () => backHandler.remove();
     }, [navigation]);
 
+    // ✅ CORREGIDO: Cargar datos siempre
     useEffect(() => {
-        loadMoveDetails();
-        loadBoxes();
+        const loadData = async () => {
+            await loadMoveDetails();
+            await loadBoxes();
+        };
+        
+        loadData();
     }, [moveId]);
+
+    // ✅ Listener para cuando la pantalla recibe foco
+    useEffect(() => {
+        const unsubscribe = navigation.addListener('focus', () => {
+            console.log('🎯 MoveDetailScreen enfocada - recargando datos');
+            loadMoveDetails();
+            loadBoxes();
+        });
+
+        return unsubscribe;
+    }, [navigation, moveId]);
 
     const loadMoveDetails = async () => {
         try {
-            // TODO: Implementar función getMoveById en moveService
-            // Por ahora usamos los datos del parámetro
-            console.log('🟡 Cargando detalles de mudanza:', moveId);
+            console.log('🟡 Cargando detalles de mudanza desde Firebase:', moveId);
+            
+            const moveData = await getMoveById(moveId);
+            
+            if (moveData) {
+                console.log('✅ Datos cargados de Firebase:', {
+                    origin: moveData.origin,
+                    destination: moveData.destination,
+                    moveType: moveData.moveType,
+                    moveDate: moveData.moveDate
+                });
+                
+                // ✅ Actualizar estado con TODOS los datos de Firebase
+                setMove({
+                    id: moveId,
+                    origin: moveData.origin || '',
+                    destination: moveData.destination || '',
+                    moveType: moveData.moveType || 'residential',
+                    moveDate: moveData.moveDate || null,
+                    notes: moveData.notes || ''
+                });
+            } else {
+                console.log('⚠️ No se encontraron datos en Firebase');
+            }
+            
         } catch (error) {
             console.log('❌ Error cargando detalles:', error);
         }
@@ -167,7 +259,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
         try {
             console.log('🟡 Buscando cajas para moveId:', moveId);
             const boxesList = await getBoxesByMoveId(moveId);
-            console.log('🟢 Total cajas encontradas:', boxesList.length, 'para moveId:', moveId);
+            console.log('🟢 Total cajas encontradas:', boxesList.length);
             setBoxes(boxesList);
         } catch (error) {
             console.log('❌ Error cargando cajas:', error);
@@ -213,7 +305,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
     };
 
     const getMoveStatusForMove = () => {
-        return getMoveStatus(move);
+        return getMoveStatus(move, boxes);
     };
 
     const getTotalItems = () => {
@@ -230,6 +322,10 @@ const MoveDetailScreen = ({ route, navigation }) => {
 
     const getFragileBoxesCount = () => {
         return boxes.filter(box => box.isFragile).length;
+    };
+
+    const getBoxesWithItemsCount = () => {
+        return boxes.filter(box => hasBoxValidItems(box)).length;
     };
 
     const getBoxesByRoom = () => {
@@ -273,22 +369,18 @@ const MoveDetailScreen = ({ route, navigation }) => {
             return;
         }
 
-        // ✅ Cerrar el modal primero
         closeActionsModal();
 
-        // ✅ Esperar un momento para que el modal se cierre completamente
         setTimeout(() => {
-            // ✅ Ahora mostrar la alerta de confirmación
             Alert.alert(
                 'Eliminar Mudanza',
-                `¿Estás seguro de eliminar la mudanza "${moveOrigin || 'Origen'} → ${moveDestination || 'Destino'}"?`,
+                `¿Estás seguro de eliminar la mudanza "${move.origin || 'Origen'} → ${move.destination || 'Destino'}"?`,
                 [
                     {
                         text: 'Cancelar',
                         style: 'cancel',
                         onPress: () => {
-                            console.log('✅ Eliminación de mudanza cancelada por el usuario');
-                            // NO hacer nada - el usuario canceló
+                            console.log('✅ Eliminación de mudanza cancelada');
                         }
                     },
                     {
@@ -300,18 +392,15 @@ const MoveDetailScreen = ({ route, navigation }) => {
                         }
                     }
                 ],
-                // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
                 { cancelable: false }
             );
-        }, 100); // Esperar 300ms para que el modal se cierre
+        }, 100);
     };
 
     const performDeleteMove = async () => {
         try {
             console.log('🟡 Eliminando mudanza:', moveId);
             await deleteMove(moveId);
-
-            // ✅ Navegar después de eliminar
             navigation.navigate('MyTrips');
 
         } catch (error) {
@@ -332,12 +421,9 @@ const MoveDetailScreen = ({ route, navigation }) => {
             return;
         }
 
-        // ✅ Cerrar el modal primero
         closeBoxModal();
 
-        // ✅ Esperar un momento para que el modal se cierre completamente
         setTimeout(() => {
-            // ✅ Ahora mostrar la alerta de confirmación
             Alert.alert(
                 'Eliminar Caja',
                 `¿Estás seguro de eliminar "${boxItem.nombre || 'esta caja'}"?`,
@@ -346,8 +432,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
                         text: 'Cancelar',
                         style: 'cancel',
                         onPress: () => {
-                            console.log('✅ Eliminación de caja cancelada por el usuario');
-                            // NO hacer nada - el usuario canceló
+                            console.log('✅ Eliminación de caja cancelada');
                         }
                     },
                     {
@@ -359,21 +444,16 @@ const MoveDetailScreen = ({ route, navigation }) => {
                         }
                     }
                 ],
-                // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
                 { cancelable: false }
             );
-        }, 100); // Esperar 300ms para que el modal se cierre
+        }, 100);
     };
 
     const performDeleteBox = async (boxItem) => {
         try {
             console.log('🟡 Eliminando caja:', boxItem.id, 'de mudanza:', moveId);
             await deleteBox(moveId, boxItem.id);
-
-            // ✅ Actualizar la lista después de eliminar
             setBoxes(prevBoxes => prevBoxes.filter(item => item.id !== boxItem.id));
-
-            // ✅ Mostrar confirmación
             Alert.alert('✅', 'Caja eliminada correctamente');
 
         } catch (error) {
@@ -381,8 +461,6 @@ const MoveDetailScreen = ({ route, navigation }) => {
             Alert.alert('Error', 'No se pudo eliminar la caja');
         }
     };
-
-
 
     const handleEditBox = (boxItem) => {
         const moveStatus = getMoveStatusForMove();
@@ -399,9 +477,9 @@ const MoveDetailScreen = ({ route, navigation }) => {
         closeBoxModal();
         navigation.navigate('NewBox', {
             moveId: moveId,
-            origin: moveOrigin,
-            destination: moveDestination,
-            moveType: moveType,
+            origin: move.origin, // ✅ Usar datos del estado, no parámetros
+            destination: move.destination,
+            moveType: move.moveType,
             originScreen: 'MoveDetail',
             boxToEdit: boxItem,
             mode: 'edit'
@@ -426,10 +504,12 @@ const MoveDetailScreen = ({ route, navigation }) => {
 
         navigation.navigate('EditMove', {
             moveId: moveId,
-            moveOrigin: moveOrigin,
-            moveDestination: moveDestination,
-            moveType: moveType,
-            origin: 'MoveDetail'
+            moveOrigin: move.origin, // ✅ Usar datos del estado
+            moveDestination: move.destination,
+            moveType: move.moveType,
+            origin: 'MoveDetail',
+            moveDate: move.moveDate,
+            notes: move.notes
         });
     };
 
@@ -437,6 +517,30 @@ const MoveDetailScreen = ({ route, navigation }) => {
         const moveStatus = getMoveStatusForMove();
 
         if (!moveStatus.canEditBoxes) {
+            if (moveStatus.status === 'Fallida' && moveStatus.canEditBoxes) {
+                Alert.alert(
+                    'Mudanza Fallida',
+                    `Esta mudanza no tiene cajas con items. ¿Deseas agregar cajas ahora para recuperarla?`,
+                    [
+                        { text: 'Cancelar', style: 'cancel' },
+                        {
+                            text: 'Agregar Cajas',
+                            onPress: () => {
+                                navigation.navigate('NewBox', {
+                                    moveId: moveId,
+                                    origin: move.origin, // ✅ Usar datos del estado
+                                    destination: move.destination,
+                                    moveType: move.moveType,
+                                    originScreen: 'MoveDetail',
+                                    forceBoxes: true
+                                });
+                            }
+                        }
+                    ]
+                );
+                return;
+            }
+            
             Alert.alert(
                 `Mudanza ${moveStatus.status}`,
                 `No puedes agregar cajas a mudanzas que están ${moveStatus.status.toLowerCase()}.`,
@@ -447,21 +551,20 @@ const MoveDetailScreen = ({ route, navigation }) => {
 
         navigation.navigate('NewBox', {
             moveId: moveId,
-            origin: moveOrigin,
-            destination: moveDestination,
-            moveType: moveType,
+            origin: move.origin, // ✅ Usar datos del estado
+            destination: move.destination,
+            moveType: move.moveType,
             originScreen: 'MoveDetail'
         });
     };
 
     const getMoveTypeLabel = () => {
-        switch (moveType) {
-            case 'residential': return '🚚 Mudanza Residencial';
-            case 'office': return '🏢 Mudanza de Oficina';
-            case 'student': return '🎓 Mudanza Estudiantil';
-            case 'international': return '🌎 Mudanza Internacional';
-            case 'storage': return '📦 Solo Almacenamiento';
-            case 'other': return '🏠 Otro tipo';
+        switch (move.moveType) { // ✅ Usar move.moveType del estado
+            case 'residential': return '🏠 Mudanza residencial';
+            case 'office': return '🏢 Mudanza para oficina';
+            case 'personal': return '👤 Mudanza particular';
+            case 'company': return '🏭 Mudanza para empresa';
+            case 'other': return '🚚 Otro tipo de mudanza';
             default: return 'Tipo de mudanza';
         }
     };
@@ -479,11 +582,22 @@ const MoveDetailScreen = ({ route, navigation }) => {
         }
     };
 
+    // ✅ Agregar botón de recarga
+    const handleRefresh = () => {
+        loadMoveDetails();
+        loadBoxes();
+        Alert.alert('✅', 'Datos actualizados');
+    };
+
     const moveStatus = getMoveStatusForMove();
     const totalItems = getTotalItems();
     const totalWeight = getTotalWeight();
     const fragileBoxes = getFragileBoxesCount();
+    const boxesWithItems = getBoxesWithItemsCount();
     const boxesByRoom = getBoxesByRoom();
+    
+    const hasEmptyBoxes = boxes.length > 0 && boxesWithItems === 0;
+    const hasNoBoxesAtAll = boxes.length === 0;
 
     return (
         <View style={[styles.container, { paddingTop: insets.top }]}>
@@ -496,32 +610,110 @@ const MoveDetailScreen = ({ route, navigation }) => {
                 </TouchableOpacity>
                 <Text style={styles.headerTitle}>Detalle de Mudanza</Text>
                 <View style={styles.headerActions}>
-                    <TouchableOpacity onPress={navigateToEditMove} style={styles.headerButton}>
-                        <Ionicons name="create" size={24} color="#2196F3" />
+                    {/* Botón de actualizar */}
+                    <TouchableOpacity 
+                        onPress={handleRefresh} 
+                        style={styles.headerButton}
+                    >
+                        <Ionicons name="refresh" size={22} color="#4CAF50" />
                     </TouchableOpacity>
+                    
+                    {/* Botón de editar */}
+                    <TouchableOpacity 
+                        onPress={navigateToEditMove} 
+                        style={styles.headerButton}
+                        disabled={!moveStatus.canEdit}
+                    >
+                        <Ionicons 
+                            name="create" 
+                            size={22} 
+                            color={!moveStatus.canEdit ? "#666" : "#2196F3"} 
+                        />
+                    </TouchableOpacity>
+                    
+                    {/* Botón de acciones */}
                     <TouchableOpacity onPress={openActionsModal} style={styles.headerButton}>
-                        <Ionicons name="ellipsis-vertical" size={24} color="#FFFFFF" />
+                        <Ionicons name="ellipsis-vertical" size={22} color="#FFFFFF" />
                     </TouchableOpacity>
                 </View>
             </View>
 
-            <ScrollView style={styles.content}>
-                {/* Título Principal */}
+            <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+                {/* Título Principal - ✅ Usar move.origin y move.destination del estado */}
                 <View style={styles.mainTitleSection}>
                     <Text style={styles.mainTitle}>
-                        {moveOrigin} → {moveDestination}
+                        {move.origin || 'Origen no especificado'} → {move.destination || 'Destino no especificado'}
                     </Text>
                     <View style={[styles.statusBadge, { backgroundColor: moveStatus.color }]}>
                         <Text style={styles.statusText}>{moveStatus.status}</Text>
                     </View>
                 </View>
 
+                {/* Mensaje si está fallida */}
+                {(moveStatus.status === 'Fallida' && (hasEmptyBoxes || hasNoBoxesAtAll)) && (
+                    <View style={[
+                        styles.failedMessageContainer,
+                        hasEmptyBoxes ? styles.emptyItemsMessageContainer : styles.noItemsMessageContainer
+                    ]}>
+                        <Ionicons 
+                            name={hasEmptyBoxes ? "alert-circle" : "warning"} 
+                            size={20} 
+                            color={hasEmptyBoxes ? "#FF9800" : "#DC3545"} 
+                        />
+                        <View style={styles.failedMessageContent}>
+                            <Text style={[
+                                styles.failedMessageTitle,
+                                hasEmptyBoxes ? styles.emptyItemsMessage : styles.noItemsMessage
+                            ]}>
+                                {hasNoBoxesAtAll ? '¡Mudanza sin cajas!' : '¡Cajas vacías!'}
+                            </Text>
+                            <Text style={styles.failedMessageText}>
+                                {hasNoBoxesAtAll 
+                                    ? 'No hay cajas agregadas a esta mudanza.' 
+                                    : `${boxes.length} caja${boxes.length !== 1 ? 's' : ''} pero ninguna tiene items.`
+                                }
+                            </Text>
+                            {moveStatus.canEditBoxes && (
+                                <TouchableOpacity
+                                    style={[
+                                        styles.recoveryButton,
+                                        hasEmptyBoxes ? styles.emptyItemsButton : styles.noItemsButton
+                                    ]}
+                                    onPress={navigateToNewBox}
+                                >
+                                    <Ionicons name="add" size={18} color="#FFFFFF" />
+                                    <Text style={styles.recoveryButtonText}>
+                                        Agregar {hasNoBoxesAtAll ? 'Cajas' : 'Items'}
+                                    </Text>
+                                </TouchableOpacity>
+                            )}
+                        </View>
+                    </View>
+                )}
+
                 {/* Estadísticas */}
                 <View style={styles.statsContainer}>
                     <View style={styles.statItem}>
-                        <Ionicons name="cube" size={24} color="#FF6B6B" />
-                        <Text style={styles.statNumber}>{boxes.length}</Text>
+                        <Ionicons 
+                            name="cube" 
+                            size={24} 
+                            color={boxesWithItems > 0 ? "#FF6B6B" : (hasEmptyBoxes ? "#FF9800" : "#DC3545")} 
+                        />
+                        <Text style={[
+                            styles.statNumber,
+                            hasEmptyBoxes && styles.emptyItemsCount,
+                            hasNoBoxesAtAll && styles.noItemsCount
+                        ]}>
+                            {boxes.length}
+                        </Text>
                         <Text style={styles.statLabel}>Cajas</Text>
+                        <Text style={[
+                            styles.statSubtext,
+                            hasEmptyBoxes && styles.emptyItemsSubtext,
+                            hasNoBoxesAtAll && styles.noItemsSubtext
+                        ]}>
+                            {boxesWithItems} con items
+                        </Text>
                     </View>
                     <View style={styles.statItem}>
                         <Ionicons name="list" size={24} color="#4CAF50" />
@@ -540,7 +732,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
                     </View>
                 </View>
 
-                {/* Información de la Mudanza */}
+                {/* Información de la Mudanza - ✅ Usar datos del estado move */}
                 <View style={styles.section}>
                     <Text style={styles.sectionTitle}>📋 Información de la Mudanza</Text>
                     <View style={styles.infoCard}>
@@ -551,18 +743,27 @@ const MoveDetailScreen = ({ route, navigation }) => {
                                 <Text style={styles.infoValue}>{getMoveTypeLabel()}</Text>
                             </View>
                         </View>
+                        {move.moveDate && (
+                            <View style={styles.infoRow}>
+                                <Ionicons name="calendar" size={20} color="#4CAF50" />
+                                <View style={styles.infoContent}>
+                                    <Text style={styles.infoLabel}>Fecha</Text>
+                                    <Text style={styles.infoValue}>{formatDate(move.moveDate)}</Text>
+                                </View>
+                            </View>
+                        )}
                         <View style={styles.infoRow}>
                             <Ionicons name="location" size={20} color="#2196F3" />
                             <View style={styles.infoContent}>
                                 <Text style={styles.infoLabel}>Origen</Text>
-                                <Text style={styles.infoValue}>{moveOrigin || 'No especificado'}</Text>
+                                <Text style={styles.infoValue}>{move.origin || 'No especificado'}</Text>
                             </View>
                         </View>
                         <View style={styles.infoRow}>
                             <Ionicons name="flag" size={20} color="#4CAF50" />
                             <View style={styles.infoContent}>
                                 <Text style={styles.infoLabel}>Destino</Text>
-                                <Text style={styles.infoValue}>{moveDestination || 'No especificado'}</Text>
+                                <Text style={styles.infoValue}>{move.destination || 'No especificado'}</Text>
                             </View>
                         </View>
                     </View>
@@ -576,7 +777,7 @@ const MoveDetailScreen = ({ route, navigation }) => {
                                 📦 Cajas por Habitación
                             </Text>
                             <Text style={styles.totalItems}>
-                                {boxes.length} cajas en total
+                                {boxes.length} cajas en total • {boxesWithItems} con items
                             </Text>
                         </View>
                         <TouchableOpacity
@@ -606,57 +807,82 @@ const MoveDetailScreen = ({ route, navigation }) => {
                             <View key={roomId} style={styles.roomSection}>
                                 <View style={styles.roomHeader}>
                                     <Text style={styles.roomTitle}>{getRoomLabel(roomId)}</Text>
-                                    <Text style={styles.roomCount}>{roomBoxes.length} caja{roomBoxes.length !== 1 ? 's' : ''}</Text>
+                                    <Text style={styles.roomCount}>
+                                        {roomBoxes.length} caja{roomBoxes.length !== 1 ? 's' : ''}
+                                    </Text>
                                 </View>
 
-                                {roomBoxes.map((box, index) => (
-                                    <TouchableOpacity
-                                        key={box.id || index}
-                                        style={[styles.boxCard, box.isFragile && styles.fragileBox]}
-                                        onPress={() => openBoxModal(box)}
-                                    >
-                                        <View style={styles.boxHeader}>
-                                            <Text style={styles.boxName}>
-                                                {box.nombre || 'Caja sin nombre'}
-                                                {box.isFragile && ' 🚨'}
-                                            </Text>
-                                            <View style={styles.boxIcons}>
-                                                {box.peso && (
-                                                    <View style={styles.boxStat}>
-                                                        <Ionicons name="scale" size={12} color="#888" />
-                                                        <Text style={styles.boxStatText}>{box.peso} kg</Text>
-                                                    </View>
-                                                )}
-                                                <Text style={styles.boxItemCount}>
-                                                    {box.items?.length || 0} artículos
+                                {roomBoxes.map((box, index) => {
+                                    const hasItems = hasBoxValidItems(box);
+                                    return (
+                                        <TouchableOpacity
+                                            key={box.id || index}
+                                            style={[
+                                                styles.boxCard, 
+                                                box.isFragile && styles.fragileBox,
+                                                !hasItems && styles.emptyBox
+                                            ]}
+                                            onPress={() => openBoxModal(box)}
+                                        >
+                                            <View style={styles.boxHeader}>
+                                                <Text style={[
+                                                    styles.boxName,
+                                                    !hasItems && styles.emptyBoxName
+                                                ]}>
+                                                    {box.nombre || 'Caja sin nombre'}
+                                                    {box.isFragile && ' 🚨'}
+                                                    {!hasItems && ' (vacía)'}
                                                 </Text>
+                                                <View style={styles.boxIcons}>
+                                                    {box.peso && (
+                                                        <View style={styles.boxStat}>
+                                                            <Ionicons name="scale" size={12} color="#888" />
+                                                            <Text style={styles.boxStatText}>{box.peso} kg</Text>
+                                                        </View>
+                                                    )}
+                                                    <Text style={[
+                                                        styles.boxItemCount,
+                                                        !hasItems && styles.emptyBoxCount
+                                                    ]}>
+                                                        {box.items?.length || 0} artículos
+                                                    </Text>
+                                                </View>
                                             </View>
-                                        </View>
 
-                                        {box.descripcion && (
-                                            <Text style={styles.boxDescription} numberOfLines={2}>
-                                                {box.descripcion}
-                                            </Text>
-                                        )}
-
-                                        {/* Vista previa de artículos */}
-                                        {box.items?.slice(0, 2).map((item, itemIndex) => (
-                                            <View key={itemIndex} style={styles.itemRow}>
-                                                <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
-                                                <Text style={styles.itemText}>{item}</Text>
-                                            </View>
-                                        ))}
-
-                                        {box.items?.length > 2 && (
-                                            <View style={styles.moreItemsContainer}>
-                                                <Ionicons name="ellipsis-horizontal" size={14} color="#BB86FC" />
-                                                <Text style={styles.moreItems}>
-                                                    Ver {box.items.length - 2} artículo{box.items.length - 2 !== 1 ? 's' : ''} más...
+                                            {box.descripcion && (
+                                                <Text style={styles.boxDescription} numberOfLines={2}>
+                                                    {box.descripcion}
                                                 </Text>
-                                            </View>
-                                        )}
-                                    </TouchableOpacity>
-                                ))}
+                                            )}
+
+                                            {/* Vista previa de artículos */}
+                                            {hasItems && box.items?.slice(0, 2).map((item, itemIndex) => (
+                                                <View key={itemIndex} style={styles.itemRow}>
+                                                    <Ionicons name="checkmark-circle" size={14} color="#4CAF50" />
+                                                    <Text style={styles.itemText}>{item}</Text>
+                                                </View>
+                                            ))}
+
+                                            {!hasItems && (
+                                                <View style={styles.emptyBoxWarning}>
+                                                    <Ionicons name="alert-circle" size={14} color="#FF9800" />
+                                                    <Text style={styles.emptyBoxWarningText}>
+                                                        Esta caja no tiene artículos
+                                                    </Text>
+                                                </View>
+                                            )}
+
+                                            {hasItems && box.items?.length > 2 && (
+                                                <View style={styles.moreItemsContainer}>
+                                                    <Ionicons name="ellipsis-horizontal" size={14} color="#BB86FC" />
+                                                    <Text style={styles.moreItems}>
+                                                        Ver {box.items.length - 2} artículo{box.items.length - 2 !== 1 ? 's' : ''} más...
+                                                    </Text>
+                                                </View>
+                                            )}
+                                        </TouchableOpacity>
+                                    );
+                                })}
                             </View>
                         ))
                     ) : (
@@ -671,16 +897,6 @@ const MoveDetailScreen = ({ route, navigation }) => {
                             </Text>
                         </View>
                     )}
-                </View>
-
-                {/* Información adicional */}
-                <View style={styles.section}>
-                    <Text style={styles.sectionTitle}>📝 Notas Adicionales</Text>
-                    <View style={styles.infoCard}>
-                        <Text style={styles.notesText}>
-                            {move.notes || 'No hay notas adicionales para esta mudanza.'}
-                        </Text>
-                    </View>
                 </View>
             </ScrollView>
 
@@ -751,8 +967,11 @@ const MoveDetailScreen = ({ route, navigation }) => {
 
                                     {(!selectedBox?.items || selectedBox.items.length === 0) && (
                                         <View style={styles.modalEmpty}>
-                                            <Ionicons name="alert-circle" size={40} color="#666" />
-                                            <Text style={styles.modalEmptyText}>No hay artículos en esta caja</Text>
+                                            <Ionicons name="alert-circle" size={40} color="#FF9800" />
+                                            <Text style={styles.modalEmptyText}>¡Esta caja está vacía!</Text>
+                                            <Text style={styles.modalEmptySubtext}>
+                                                No hay artículos en esta caja
+                                            </Text>
                                         </View>
                                     )}
                                 </ScrollView>
@@ -908,10 +1127,10 @@ const styles = StyleSheet.create({
     headerActions: {
         flexDirection: 'row',
         alignItems: 'center',
+        gap: 10, // ✅ Espacio entre botones
     },
     headerButton: {
         padding: 4,
-        marginLeft: 12,
     },
     content: {
         flex: 1,
@@ -939,6 +1158,65 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         fontSize: 14,
     },
+    // Mensaje de fallido
+    failedMessageContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+        padding: 15,
+        borderRadius: 12,
+        marginBottom: 20,
+        gap: 12,
+    },
+    emptyItemsMessageContainer: {
+        backgroundColor: 'rgba(255, 152, 0, 0.15)',
+        borderLeftWidth: 4,
+        borderLeftColor: '#FF9800',
+    },
+    noItemsMessageContainer: {
+        backgroundColor: 'rgba(220, 53, 69, 0.15)',
+        borderLeftWidth: 4,
+        borderLeftColor: '#DC3545',
+    },
+    failedMessageContent: {
+        flex: 1,
+    },
+    failedMessageTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    emptyItemsMessage: {
+        color: '#FF9800',
+    },
+    noItemsMessage: {
+        color: '#DC3545',
+    },
+    failedMessageText: {
+        fontSize: 14,
+        color: '#FFFFFF',
+        marginBottom: 10,
+    },
+    recoveryButton: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 16,
+        paddingVertical: 8,
+        borderRadius: 20,
+        gap: 6,
+    },
+    emptyItemsButton: {
+        backgroundColor: '#FF9800',
+    },
+    noItemsButton: {
+        backgroundColor: '#DC3545',
+    },
+    recoveryButtonText: {
+        color: '#FFFFFF',
+        fontWeight: 'bold',
+        fontSize: 14,
+    },
+    // Estadísticas
     statsContainer: {
         flexDirection: 'row',
         justifyContent: 'space-around',
@@ -956,11 +1234,28 @@ const styles = StyleSheet.create({
         color: '#FFFFFF',
         marginTop: 8,
     },
+    emptyItemsCount: {
+        color: '#FF9800',
+    },
+    noItemsCount: {
+        color: '#DC3545',
+    },
     statLabel: {
         fontSize: 12,
         color: '#BB86FC',
         marginTop: 4,
         textAlign: 'center',
+    },
+    statSubtext: {
+        fontSize: 10,
+        color: '#888',
+        marginTop: 2,
+    },
+    emptyItemsSubtext: {
+        color: '#FF9800',
+    },
+    noItemsSubtext: {
+        color: '#DC3545',
     },
     section: {
         marginBottom: 30,
@@ -1038,6 +1333,10 @@ const styles = StyleSheet.create({
         borderLeftColor: '#FFA500',
         backgroundColor: 'rgba(255, 165, 0, 0.05)',
     },
+    emptyBox: {
+        borderLeftColor: '#FF9800',
+        backgroundColor: 'rgba(255, 152, 0, 0.05)',
+    },
     boxHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -1049,6 +1348,9 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#FFFFFF',
         flex: 1,
+    },
+    emptyBoxName: {
+        color: '#FF9800',
     },
     boxIcons: {
         flexDirection: 'row',
@@ -1068,11 +1370,28 @@ const styles = StyleSheet.create({
         fontSize: 14,
         color: '#888',
     },
+    emptyBoxCount: {
+        color: '#FF9800',
+    },
     boxDescription: {
         fontSize: 14,
         color: '#BB86FC',
         marginBottom: 12,
         fontStyle: 'italic',
+    },
+    emptyBoxWarning: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        padding: 8,
+        backgroundColor: 'rgba(255, 152, 0, 0.1)',
+        borderRadius: 6,
+        marginBottom: 10,
+        gap: 8,
+    },
+    emptyBoxWarningText: {
+        color: '#FF9800',
+        fontSize: 12,
+        fontWeight: '500',
     },
     itemRow: {
         flexDirection: 'row',
@@ -1117,11 +1436,6 @@ const styles = StyleSheet.create({
         fontSize: 14,
         textAlign: 'center',
         marginTop: 8,
-    },
-    notesText: {
-        fontSize: 14,
-        color: '#FFFFFF',
-        lineHeight: 20,
     },
     addButton: {
         flexDirection: 'row',
@@ -1220,9 +1534,16 @@ const styles = StyleSheet.create({
         padding: 40,
     },
     modalEmptyText: {
-        color: '#888',
+        color: '#FF9800',
         fontSize: 16,
         marginTop: 12,
+        fontWeight: 'bold',
+        textAlign: 'center',
+    },
+    modalEmptySubtext: {
+        color: '#888',
+        fontSize: 14,
+        marginTop: 4,
         textAlign: 'center',
     },
     modalFooter: {

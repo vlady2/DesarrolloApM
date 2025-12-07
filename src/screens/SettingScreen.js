@@ -39,16 +39,12 @@ const SettingScreen = ({ navigation }) => {
             icon: '👤',
             onPress: () => navigation.navigate('ProfileScreen')
         },
-        /*{
-            title: 'Notificaciones',
-            icon: '🔔',
-            onPress: () => console.log('Notificaciones presionado')
-        },
+        
         {
             title: 'Privacidad',
             icon: '🔒',
-            onPress: () => console.log('Privacidad presionado')
-        },*/
+            onPress: () => navigation.navigate('PrivacyScreen')
+        },
         {
             title: 'Ayuda y Soporte',
             icon: '❓',
@@ -58,6 +54,7 @@ const SettingScreen = ({ navigation }) => {
             title: 'Acerca de',
             icon: 'ℹ️',
             onPress: () => navigation.navigate('About')
+        
         }
     ];
 

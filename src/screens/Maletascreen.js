@@ -1,4 +1,4 @@
-// MaletasScreen.js
+// MaletasScreen.js - VERSIÓN CORREGIDA
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -14,7 +14,7 @@ import {
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
-import { deleteBox, getAllUserBoxes } from '../../firebase/boxService'; // ✅ NUEVA IMPORTACIÓN
+import { deleteBox, getAllUserBoxes } from '../../firebase/boxService';
 import { deleteLuggage, getAllUserLuggage } from '../../firebase/luggageService';
 
 // ✅ Categorías combinadas (maletas + cajas)
@@ -32,8 +32,23 @@ const CATEGORIAS_COMBINADAS = [
   { id: 'wardrobe', nombre: 'Caja Ropero', icon: 'shirt-outline', type: 'box' }
 ];
 
-// ✅ FUNCIÓN CENTRAL: Verificar estado del viaje o mudanza
-const getItemStatus = (item) => {
+// ✅ FUNCIÓN AUXILIAR: Verificar si una caja tiene items válidos
+const hasBoxValidItems = (box) => {
+  const items = box.items;
+  if (!items) return false;
+  
+  if (Array.isArray(items) && items.length > 0) {
+    return true;
+  } else if (typeof items === 'string' && items.trim() !== '') {
+    return true;
+  } else if (typeof items === 'object' && items !== null) {
+    return Object.keys(items).length > 0;
+  }
+  return false;
+};
+
+// ✅ FUNCIÓN CORREGIDA: Verificar estado del viaje o mudanza
+const getItemStatus = (item, allBoxes = []) => {
   const isBox = item.itemType === 'box' || item.type === 'caja';
   
   // Para cajas (mudanzas)
@@ -49,14 +64,17 @@ const getItemStatus = (item) => {
     }
     
     const today = new Date();
+    today.setHours(0, 0, 0, 0);
     let moveDate;
     
     try {
       if (item.moveDate.includes('/')) {
         const [day, month, year] = item.moveDate.split('/');
-        moveDate = new Date(year, month - 1, day);
+        moveDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        moveDate.setHours(0, 0, 0, 0);
       } else {
         moveDate = new Date(item.moveDate);
+        moveDate.setHours(0, 0, 0, 0);
       }
     } catch (error) {
       return { 
@@ -78,20 +96,37 @@ const getItemStatus = (item) => {
       };
     }
     
-    const todayStr = today.toDateString();
-    const moveDateStr = moveDate.toDateString();
+    // ✅ Verificar si hay cajas con items
+    const boxesWithItems = allBoxes.filter(box => hasBoxValidItems(box)).length;
+    const totalBoxes = allBoxes.length;
+    const hasNoBoxesAtAll = totalBoxes === 0;
+    const hasEmptyBoxes = totalBoxes > 0 && boxesWithItems === 0;
     
-    if (todayStr === moveDateStr) {
+    const todayTime = today.getTime();
+    const moveDateTime = moveDate.getTime();
+    
+    // 🟡 HOY: Mudanza en curso o fallida
+    if (todayTime === moveDateTime) {
+      if (hasNoBoxesAtAll || hasEmptyBoxes) {
+        return { 
+          status: 'Fallida', 
+          color: hasEmptyBoxes ? '#FF9800' : '#DC3545',
+          icon: hasEmptyBoxes ? 'alert-circle' : 'close-circle',
+          canEdit: false, 
+          canDelete: false
+        };
+      }
       return { 
-        status: 'Hoy', 
-        color: '#F44336', 
-        icon: 'warning', 
+        status: 'En curso', 
+        color: '#4CAF50', 
+        icon: 'business', 
         canEdit: false, 
         canDelete: false
       };
     }
     
-    if (today < moveDate) {
+    // 📅 FECHA FUTURA: Pendiente
+    if (todayTime < moveDateTime) {
       return { 
         status: 'Pendiente', 
         color: '#FFA500', 
@@ -101,18 +136,28 @@ const getItemStatus = (item) => {
       };
     }
     
-    if (today > moveDate) {
+    // ✅ FECHA PASADA: Completada o Fallida
+    if (todayTime > moveDateTime) {
+      if (hasNoBoxesAtAll || hasEmptyBoxes) {
+        return { 
+          status: 'Fallida', 
+          color: hasEmptyBoxes ? '#FF9800' : '#DC3545',
+          icon: hasEmptyBoxes ? 'alert-circle' : 'close-circle',
+          canEdit: false, 
+          canDelete: true
+        };
+      }
       return { 
         status: 'Completada', 
         color: '#888', 
         icon: 'checkmark-done', 
         canEdit: false, 
-        canDelete: false
+        canDelete: true
       };
     }
   }
   
-  // Para maletas (viajes)
+  // ✅ PARA MALETAS (VIAJES) - VERSIÓN CORREGIDA
   if (!item.startDate) {
     return { 
       status: 'Planificado', 
@@ -124,22 +169,33 @@ const getItemStatus = (item) => {
   }
   
   const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  
   let startDate, endDate;
   
   try {
+    // Formato DD/MM/YYYY
     if (item.startDate.includes('/')) {
       const [day, month, year] = item.startDate.split('/');
-      startDate = new Date(year, month - 1, day);
+      startDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+      startDate.setHours(0, 0, 0, 0);
     } else {
+      // Formato YYYY-MM-DD o timestamp
       startDate = new Date(item.startDate);
+      startDate.setHours(0, 0, 0, 0);
     }
     
-    if (item.endDate && item.endDate.includes('/')) {
-      const [day, month, year] = item.endDate.split('/');
-      endDate = new Date(year, month - 1, day);
-    } else if (item.endDate) {
-      endDate = new Date(item.endDate);
+    if (item.endDate) {
+      if (item.endDate.includes('/')) {
+        const [day, month, year] = item.endDate.split('/');
+        endDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+        endDate.setHours(0, 0, 0, 0);
+      } else {
+        endDate = new Date(item.endDate);
+        endDate.setHours(0, 0, 0, 0);
+      }
     }
+    
   } catch (error) {
     return { 
       status: 'Planificado', 
@@ -160,11 +216,13 @@ const getItemStatus = (item) => {
     };
   }
   
-  const todayStr = today.toDateString();
-  const startDateStr = startDate.toDateString();
-  const endDateStr = endDate ? endDate.toDateString() : null;
+  // Convertir a tiempos comparables
+  const todayTime = today.getTime();
+  const startDateTime = startDate.getTime();
+  const endDateTime = endDate ? endDate.getTime() : null;
   
-  if (todayStr === startDateStr) {
+  // 🟡 HOY es el día de inicio
+  if (todayTime === startDateTime) {
     return { 
       status: 'Hoy', 
       color: '#F44336', 
@@ -174,7 +232,8 @@ const getItemStatus = (item) => {
     };
   }
   
-  if (today < startDate) {
+  // 📅 FECHA FUTURA: El viaje no ha empezado
+  if (todayTime < startDateTime) {
     return { 
       status: 'Pendiente', 
       color: '#FFA500', 
@@ -184,7 +243,8 @@ const getItemStatus = (item) => {
     };
   }
   
-  if (endDate && !isNaN(endDate.getTime()) && today > endDate) {
+  // ✅ FECHA PASADA: Viaje completado (si tiene fecha de fin)
+  if (endDateTime && todayTime > endDateTime) {
     return { 
       status: 'Completado', 
       color: '#888', 
@@ -194,11 +254,23 @@ const getItemStatus = (item) => {
     };
   }
   
-  if (today >= startDate && (!endDate || today <= endDate)) {
+  // 🟢 EN CURSO: Hoy está entre startDate y endDate
+  if (todayTime >= startDateTime && (!endDate || todayTime <= endDateTime)) {
     return { 
       status: 'En curso', 
       color: '#4CAF50', 
       icon: 'airplane', 
+      canEdit: false, 
+      canDelete: false
+    };
+  }
+  
+  // Si no hay fecha de fin pero la fecha de inicio ya pasó
+  if (!endDate && todayTime > startDateTime) {
+    return { 
+      status: 'Completado', 
+      color: '#888', 
+      icon: 'checkmark-done', 
       canEdit: false, 
       canDelete: false
     };
@@ -220,7 +292,7 @@ const MaletasScreen = ({ navigation }) => {
   const [activeFilter, setActiveFilter] = useState('all');
   const [modalVisible, setModalVisible] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
-  const [deleting, setDeleting] = useState(false); // ✅ NUEVO: Estado para controlar eliminación
+  const [deleting, setDeleting] = useState(false);
   
   const insets = useSafeAreaInsets();
 
@@ -253,33 +325,41 @@ const MaletasScreen = ({ navigation }) => {
     try {
       setLoading(true);
       
-      // Cargar maletas y cajas en paralelo
       const [luggage, boxes] = await Promise.all([
         getAllUserLuggage().catch(() => []),
         getAllUserBoxes().catch(() => [])
       ]);
       
-      // Combinar y agregar tipo para diferenciar
       const combinedItems = [
         ...luggage.map(item => ({ 
           ...item, 
           itemType: 'luggage',
-          categoria: item.categoria || 'caja' // Default para maletas sin categoría
+          categoria: item.categoria || 'caja',
+          // ✅ Asegurarnos de que las maletas tengan startDate y endDate
+          startDate: item.startDate || item.tripDates?.start,
+          endDate: item.endDate || item.tripDates?.end
         })),
         ...boxes.map(item => ({ 
           ...item, 
           itemType: 'box',
-          categoria: item.tipo || 'caja', // Usar 'tipo' como 'categoria' para cajas
-          articulos: item.items || [], // Usar 'items' como 'articulos' para cajas
+          categoria: item.tipo || 'caja',
+          articulos: item.items || [],
           tripName: item.moveName || 'Mudanza',
           tripDestination: `${item.moveOrigin || ''} → ${item.moveDestination || ''}`,
           tripDates: { start: item.moveDate }
         }))
       ];
       
-      console.log('📦 Maletas cargadas:', luggage.length);
-      console.log('📦 Cajas cargadas:', boxes.length);
-      console.log('📦 Total elementos:', combinedItems.length);
+      console.log('📦 Total elementos cargados:', combinedItems.length);
+      console.log('📦 Maletas con fechas:', combinedItems
+        .filter(item => item.itemType === 'luggage')
+        .map(item => ({
+          nombre: item.tripName,
+          startDate: item.startDate,
+          endDate: item.endDate,
+          estado: getItemStatus(item).status
+        }))
+      );
       
       setAllItems(combinedItems);
     } catch (error) {
@@ -326,7 +406,14 @@ const MaletasScreen = ({ navigation }) => {
     };
   };
 
+  // ✅ FUNCIÓN MEJORADA: Obtener estado con todas las cajas de la misma mudanza
   const getItemStatusFromItem = (item) => {
+    if (item.itemType === 'box' && item.moveId) {
+      const boxesFromSameMove = allItems.filter(
+        i => i.itemType === 'box' && i.moveId === item.moveId
+      );
+      return getItemStatus(item, boxesFromSameMove);
+    }
     return getItemStatus(item);
   };
 
@@ -345,7 +432,6 @@ const MaletasScreen = ({ navigation }) => {
     closeModal();
     
     if (item.itemType === 'box') {
-      // Navegar a editar caja
       navigation.navigate('NewBox', { 
         moveId: item.moveId,
         origin: item.moveOrigin,
@@ -356,7 +442,6 @@ const MaletasScreen = ({ navigation }) => {
         mode: 'edit'
       });
     } else {
-      // Navegar a editar maleta
       navigation.navigate('NewMaleta', { 
         tripId: item.tripId,
         destination: item.tripDestination,
@@ -365,8 +450,8 @@ const MaletasScreen = ({ navigation }) => {
           id: item.tripId,
           destination: item.tripDestination,
           purpose: item.tripName,
-          startDate: item.tripDates?.start,
-          endDate: item.tripDates?.end
+          startDate: item.startDate,
+          endDate: item.endDate
         },
         luggageToEdit: item,
         mode: 'edit'
@@ -375,18 +460,25 @@ const MaletasScreen = ({ navigation }) => {
   };
 
   const openItemModal = (item) => {
+    console.log('🔍 Abriendo modal para:', {
+      nombre: item.tripName,
+      tipo: item.itemType,
+      startDate: item.startDate,
+      endDate: item.endDate,
+      estado: getItemStatusFromItem(item).status
+    });
+    
     setSelectedItem(item);
     setModalVisible(true);
-    setDeleting(false); // ✅ RESETEAR estado de eliminación
+    setDeleting(false);
   };
 
   const closeModal = () => {
     setModalVisible(false);
     setSelectedItem(null);
-    setDeleting(false); // ✅ RESETEAR estado de eliminación
+    setDeleting(false);
   };
 
-  // ✅ FUNCIÓN MEJORADA: Manejar confirmación de eliminación con botón cancelar funcional
   const handleDeleteItem = (item) => {
     const itemStatus = getItemStatusFromItem(item);
 
@@ -398,67 +490,60 @@ const MaletasScreen = ({ navigation }) => {
       );
       return;
     }
-    // ✅ Cerrar el modal primero
+    
     closeModal();
 
-    // ✅ Esperar un momento para que el modal se cierre completamente
-  setTimeout(() => {
-    // ✅ Ahora mostrar la alerta de confirmación
-    Alert.alert(
-      'Eliminar Elemento',
-      `¿Estás seguro de eliminar esta ${getCategoriaNombre(item.categoria)}?`,
-      [
-        { 
-          text: 'Cancelar', 
-          style: 'cancel',
-          onPress: () => {
-            console.log('✅ Eliminación cancelada por el usuario');
-            // NO hacer nada - el usuario canceló
+    setTimeout(() => {
+      Alert.alert(
+        'Eliminar Elemento',
+        `¿Estás seguro de eliminar esta ${getCategoriaNombre(item.categoria)}?`,
+        [
+          { 
+            text: 'Cancelar', 
+            style: 'cancel',
+            onPress: () => {
+              console.log('✅ Eliminación cancelada por el usuario');
+            }
+          },
+          { 
+            text: 'Eliminar', 
+            style: 'destructive',
+            onPress: async () => {
+              console.log('✅ Usuario confirmó eliminación');
+              await performDeleteItem(item);
+            }
           }
-        },
-        { 
-          text: 'Eliminar', 
-          style: 'destructive',
-          onPress: async () => {
-            console.log('✅ Usuario confirmó eliminación');
-            await performDeleteItem(item);
-          }
-        }
-      ],
-      // ✅ IMPORTANTE: Evitar que la alerta se cierre al tocar fuera
-      { cancelable: false }
-    );
-  }, 100); // Esperar 300ms para que el modal se cierre
-};
+        ],
+        { cancelable: false }
+      );
+    }, 100);
+  };
 
-  // ✅ FUNCIÓN SEPARADA: Ejecutar la eliminación
-const performDeleteItem = async (item) => {
-  try {
-    setDeleting(true);
-    
-    if (item.itemType === 'box') {
-      console.log('🟡 Eliminando caja:', item.id, 'de mudanza:', item.moveId);
-      await deleteBox(item.moveId, item.id);
-      console.log('🟢 Caja eliminada');
-    } else {
-      console.log('🟡 Eliminando maleta:', item.id, 'de viaje:', item.tripId);
-      await deleteLuggage(item.tripId, item.id);
-      console.log('🟢 Maleta eliminada');
+  const performDeleteItem = async (item) => {
+    try {
+      setDeleting(true);
+      
+      if (item.itemType === 'box') {
+        console.log('🟡 Eliminando caja:', item.id, 'de mudanza:', item.moveId);
+        await deleteBox(item.moveId, item.id);
+        console.log('🟢 Caja eliminada');
+      } else {
+        console.log('🟡 Eliminando maleta:', item.id, 'de viaje:', item.tripId);
+        await deleteLuggage(item.tripId, item.id);
+        console.log('🟢 Maleta eliminada');
+      }
+      
+      setAllItems(prevItems => prevItems.filter(i => i.id !== item.id));
+      
+      Alert.alert('✅', 'Elemento eliminado correctamente');
+      
+    } catch (error) {
+      console.error('❌ Error eliminando elemento:', error);
+      Alert.alert('Error', 'No se pudo eliminar el elemento');
+    } finally {
+      setDeleting(false);
     }
-    
-    // ✅ Actualizar la lista después de eliminar
-    setAllItems(prevItems => prevItems.filter(i => i.id !== item.id));
-    
-    // ✅ Mostrar confirmación
-    Alert.alert('✅', 'Elemento eliminado correctamente');
-    
-  } catch (error) {
-    console.error('❌ Error eliminando elemento:', error);
-    Alert.alert('Error', 'No se pudo eliminar el elemento');
-  } finally {
-    setDeleting(false);
-  }
-};
+  };
 
   const getCategoriaNombre = (categoriaId) => {
     const categoria = CATEGORIAS_COMBINADAS.find(cat => cat.id === categoriaId);
@@ -545,70 +630,70 @@ const performDeleteItem = async (item) => {
   };
 
   const renderModalActions = (item) => {
-  const itemStatus = getItemStatusFromItem(item);
-  const canEdit = itemStatus.canEdit;
-  const canDelete = itemStatus.canDelete;
-  const isBox = item.itemType === 'box';
+    const itemStatus = getItemStatusFromItem(item);
+    const canEdit = itemStatus.canEdit;
+    const canDelete = itemStatus.canDelete;
+    const isBox = item.itemType === 'box';
 
-  return (
-    <View style={styles.actionButtons}>
-      <TouchableOpacity 
-        style={[
-          styles.actionButton, 
-          styles.editButton,
-          !canEdit && styles.disabledButton
-        ]}
-        onPress={() => {
-          console.log('✏️ Editando elemento:', item.id);
-          handleEditItem(item);
-        }}
-        disabled={!canEdit || deleting}
-      >
-        <Ionicons 
-          name="create" 
-          size={20} 
-          color={!canEdit ? "#666" : "#FFFFFF"} 
-        />
-        <Text style={[
-          styles.actionButtonText,
-          !canEdit && styles.disabledText
-        ]}>
-          {!canEdit ? `${isBox ? 'Mudanza' : 'Viaje'} ${itemStatus.status}` : 'Editar'}
-        </Text>
-      </TouchableOpacity>
-
-      <TouchableOpacity 
-        style={[
-          styles.actionButton, 
-          styles.deleteButton,
-          (!canDelete || deleting) && styles.disabledButton
-        ]}
-        onPress={() => {
-          console.log('🗑️ Solicitando eliminación de elemento:', item.id);
-          handleDeleteItem(item);
-        }}
-        disabled={!canDelete || deleting}
-      >
-        {deleting ? (
-          <ActivityIndicator size="small" color="#FFFFFF" />
-        ) : (
+    return (
+      <View style={styles.actionButtons}>
+        <TouchableOpacity 
+          style={[
+            styles.actionButton, 
+            styles.editButton,
+            !canEdit && styles.disabledButton
+          ]}
+          onPress={() => {
+            console.log('✏️ Editando elemento:', item.id);
+            handleEditItem(item);
+          }}
+          disabled={!canEdit || deleting}
+        >
           <Ionicons 
-            name="trash" 
+            name="create" 
             size={20} 
-            color={!canDelete ? "#666" : "#FFFFFF"} 
+            color={!canEdit ? "#666" : "#FFFFFF"} 
           />
-        )}
-        <Text style={[
-          styles.actionButtonText,
-          (!canDelete || deleting) && styles.disabledText
-        ]}>
-          {!canDelete ? `${isBox ? 'Mudanza' : 'Viaje'} ${itemStatus.status}` : 
-           deleting ? 'Eliminando...' : 'Eliminar'}
-        </Text>
-      </TouchableOpacity>
-    </View>
-  );
-};
+          <Text style={[
+            styles.actionButtonText,
+            !canEdit && styles.disabledText
+          ]}>
+            {!canEdit ? `${isBox ? 'Mudanza' : 'Viaje'} ${itemStatus.status}` : 'Editar'}
+          </Text>
+        </TouchableOpacity>
+
+        <TouchableOpacity 
+          style={[
+            styles.actionButton, 
+            styles.deleteButton,
+            (!canDelete || deleting) && styles.disabledButton
+          ]}
+          onPress={() => {
+            console.log('🗑️ Solicitando eliminación de elemento:', item.id);
+            handleDeleteItem(item);
+          }}
+          disabled={!canDelete || deleting}
+        >
+          {deleting ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Ionicons 
+              name="trash" 
+              size={20} 
+              color={!canDelete ? "#666" : "#FFFFFF"} 
+            />
+          )}
+          <Text style={[
+            styles.actionButtonText,
+            (!canDelete || deleting) && styles.disabledText
+          ]}>
+            {!canDelete ? `${isBox ? 'Mudanza' : 'Viaje'} ${itemStatus.status}` : 
+             deleting ? 'Eliminando...' : 'Eliminar'}
+          </Text>
+        </TouchableOpacity>
+      </View>
+    );
+  };
 
   if (loading) {
     return (

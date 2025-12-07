@@ -1,5 +1,4 @@
-// En MyTripsScreen.js, reemplaza las importaciones y funciones:
-
+// MyTripsScreen.js - CÓDIGO COMPLETO SIN LOGS
 import { useEffect, useState } from 'react';
 import {
   ActivityIndicator,
@@ -16,24 +15,143 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
 import { getBoxesByMoveId } from '../../firebase/boxService';
 import { getLuggageByTripId } from '../../firebase/luggageService';
-import { deleteMove, getAllUserItems } from '../../firebase/moveService'; // ✅ NUEVA IMPORTACIÓN
+import { deleteMove, getAllUserItems } from '../../firebase/moveService';
 import { deleteTrip } from '../../firebase/tripService';
 
-// ✅ FUNCIÓN CENTRAL MEJORADA: Verificar estado del viaje o mudanza
-const getItemStatus = (item) => {
-  const isMoving = item.itemType === 'move' || item.type === 'mudanza' || item.type === 'moving';
+// ✅ FUNCIÓN MEJORADA: Obtener items de un contenedor (compatible con ambos formatos)
+const getContainerItems = (container) => {
+  const items = container.items || container.articulos;
   
-  // Para mudanzas
+  if (Array.isArray(items)) {
+    return items;
+  } else if (typeof items === 'string') {
+    return items.trim() ? [items] : [];
+  } else if (typeof items === 'object' && items !== null) {
+    return Object.values(items);
+  }
+  
+  return [];
+};
+
+// ✅ FUNCIÓN MEJORADA: Verificar EXACTAMENTE si el item tiene items
+const hasValidItems = async (item, isMoving) => {
+  try {
+    if (isMoving) {
+      const boxes = await getBoxesByMoveId(item.id);
+      if (boxes.length === 0) return false;
+      
+      for (const box of boxes) {
+        const items = getContainerItems(box);
+        if (items.length > 0) return true;
+      }
+      return false;
+      
+    } else {
+      const luggageList = await getLuggageByTripId(item.id);
+      if (luggageList.length === 0) return false;
+      
+      for (const luggage of luggageList) {
+        const items = getContainerItems(luggage);
+        if (items.length > 0) return true;
+      }
+      return false;
+    }
+  } catch (error) {
+    return false;
+  }
+};
+
+// ✅ FUNCIÓN: Contar maletas/cajas CON items
+const countValidItems = async (item, isMoving) => {
+  try {
+    if (isMoving) {
+      const boxes = await getBoxesByMoveId(item.id);
+      let count = 0;
+      
+      for (const box of boxes) {
+        const items = getContainerItems(box);
+        if (items.length > 0) count++;
+      }
+      return count;
+      
+    } else {
+      const luggageList = await getLuggageByTripId(item.id);
+      let count = 0;
+      
+      for (const luggage of luggageList) {
+        const items = getContainerItems(luggage);
+        if (items.length > 0) count++;
+      }
+      return count;
+    }
+  } catch (error) {
+    return 0;
+  }
+};
+
+// ✅ FUNCIÓN: Contar total de items
+const countTotalItems = async (item, isMoving) => {
+  try {
+    if (isMoving) {
+      const boxes = await getBoxesByMoveId(item.id);
+      let total = 0;
+      
+      for (const box of boxes) {
+        const items = getContainerItems(box);
+        total += items.length;
+      }
+      return total;
+      
+    } else {
+      const luggageList = await getLuggageByTripId(item.id);
+      let total = 0;
+      
+      for (const luggage of luggageList) {
+        const items = getContainerItems(luggage);
+        total += items.length;
+      }
+      return total;
+    }
+  } catch (error) {
+    return 0;
+  }
+};
+
+// ✅ FUNCIÓN: Contar total de maletas/cajas
+const countTotalContainers = async (item, isMoving) => {
+  try {
+    if (isMoving) {
+      const boxes = await getBoxesByMoveId(item.id);
+      return boxes.length;
+    } else {
+      const luggageList = await getLuggageByTripId(item.id);
+      return luggageList.length;
+    }
+  } catch (error) {
+    return 0;
+  }
+};
+
+// ✅ FUNCIÓN: Verificar estado del viaje/mudanza
+const getItemStatus = (item, hasValidItems = true, boxesWithItems = 0, totalBoxes = 0) => {
+  const isMoving = item.itemType === 'move';
+  
+  const hasEmptyItems = totalBoxes > 0 && boxesWithItems === 0;
+  const hasNoItemsAtAll = totalBoxes === 0;
+  
   if (isMoving) {
     if (!item.moveDate) {
       return { 
-        status: 'Planificada', 
+        status: 'Pendiente', 
         color: '#FFA500', 
-        icon: 'calendar-outline', 
+        icon: 'time-outline', 
         canEdit: true, 
         canDelete: true,
         canEditItems: true,
-        canDeleteItems: true
+        hasValidItems: hasValidItems,
+        hasEmptyItems: hasEmptyItems,
+        hasNoItemsAtAll: hasNoItemsAtAll,
+        reason: hasNoItemsAtAll ? 'Sin cajas agregadas' : (hasEmptyItems ? `${totalBoxes} caja${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
       };
     }
     
@@ -49,25 +167,31 @@ const getItemStatus = (item) => {
       }
     } catch (error) {
       return { 
-        status: 'Planificada', 
+        status: 'Pendiente', 
         color: '#FFA500', 
-        icon: 'calendar-outline', 
+        icon: 'time-outline', 
         canEdit: true, 
         canDelete: true,
         canEditItems: true,
-        canDeleteItems: true
+        hasValidItems: hasValidItems,
+        hasEmptyItems: hasEmptyItems,
+        hasNoItemsAtAll: hasNoItemsAtAll,
+        reason: hasNoItemsAtAll ? 'Sin cajas agregadas' : (hasEmptyItems ? `${totalBoxes} caja${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
       };
     }
     
     if (isNaN(moveDate.getTime())) {
       return { 
-        status: 'Planificada', 
+        status: 'Pendiente', 
         color: '#FFA500', 
-        icon: 'calendar-outline', 
+        icon: 'time-outline', 
         canEdit: true, 
         canDelete: true,
         canEditItems: true,
-        canDeleteItems: true
+        hasValidItems: hasValidItems,
+        hasEmptyItems: hasEmptyItems,
+        hasNoItemsAtAll: hasNoItemsAtAll,
+        reason: hasNoItemsAtAll ? 'Sin cajas agregadas' : (hasEmptyItems ? `${totalBoxes} caja${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
       };
     }
     
@@ -75,14 +199,58 @@ const getItemStatus = (item) => {
     const moveDateStr = moveDate.toDateString();
     
     if (todayStr === moveDateStr) {
+      if (!hasValidItems) {
+        return { 
+          status: 'Fallido', 
+          color: hasEmptyItems ? '#FF9800' : '#DC3545',
+          icon: hasEmptyItems ? 'alert-circle' : 'close-circle', 
+          canEdit: false, 
+          canDelete: false,
+          canEditItems: true,
+          hasValidItems: false,
+          hasEmptyItems: hasEmptyItems,
+          hasNoItemsAtAll: hasNoItemsAtAll,
+          reason: hasNoItemsAtAll ? 'Sin cajas agregadas' : `${totalBoxes} caja${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}`
+        };
+      }
       return { 
-        status: 'Hoy', 
-        color: '#F44336', 
-        icon: 'warning', 
+        status: 'En curso', 
+        color: '#4CAF50', 
+        icon: 'business', 
         canEdit: false, 
         canDelete: false,
         canEditItems: false,
-        canDeleteItems: false
+        hasValidItems: true,
+        hasEmptyItems: false,
+        hasNoItemsAtAll: false
+      };
+    }
+    
+    if (today > moveDate) {
+      if (!hasValidItems) {
+        return { 
+          status: 'Fallido', 
+          color: hasEmptyItems ? '#FF9800' : '#DC3545',
+          icon: hasEmptyItems ? 'alert-circle' : 'close-circle', 
+          canEdit: false, 
+          canDelete: true,
+          canEditItems: false,
+          hasValidItems: false,
+          hasEmptyItems: hasEmptyItems,
+          hasNoItemsAtAll: hasNoItemsAtAll,
+          reason: hasNoItemsAtAll ? 'Sin cajas agregadas' : `${totalBoxes} caja${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}`
+        };
+      }
+      return { 
+        status: 'Completada', 
+        color: '#888', 
+        icon: 'checkmark-done', 
+        canEdit: false, 
+        canDelete: true,
+        canEditItems: false,
+        hasValidItems: true,
+        hasEmptyItems: false,
+        hasNoItemsAtAll: false
       };
     }
     
@@ -94,43 +262,26 @@ const getItemStatus = (item) => {
         canEdit: true, 
         canDelete: true,
         canEditItems: true,
-        canDeleteItems: true
+        hasValidItems: hasValidItems,
+        hasEmptyItems: hasEmptyItems,
+        hasNoItemsAtAll: hasNoItemsAtAll,
+        reason: hasNoItemsAtAll ? 'Sin cajas agregadas' : (hasEmptyItems ? `${totalBoxes} caja${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
       };
     }
-    
-    if (today > moveDate) {
-      return { 
-        status: 'Completada', 
-        color: '#888', 
-        icon: 'checkmark-done', 
-        canEdit: false, 
-        canDelete: false,
-        canEditItems: false,
-        canDeleteItems: false
-      };
-    }
-    
-    return { 
-      status: 'Planificada', 
-      color: '#FFA500', 
-      icon: 'calendar-outline', 
-      canEdit: true, 
-      canDelete: true,
-      canEditItems: true,
-      canDeleteItems: true
-    };
   }
   
-  // Para viajes
   if (!item.startDate) {
     return { 
-      status: 'Planificado', 
+      status: 'Pendiente', 
       color: '#FFA500', 
-      icon: 'calendar-outline', 
+      icon: 'time-outline', 
       canEdit: true, 
       canDelete: true,
       canEditItems: true,
-      canDeleteItems: true
+      hasValidItems: hasValidItems,
+      hasEmptyItems: hasEmptyItems,
+      hasNoItemsAtAll: hasNoItemsAtAll,
+      reason: hasNoItemsAtAll ? 'Sin maletas agregadas' : (hasEmptyItems ? `${totalBoxes} maleta${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
     };
   }
   
@@ -153,25 +304,31 @@ const getItemStatus = (item) => {
     }
   } catch (error) {
     return { 
-      status: 'Planificado', 
+      status: 'Pendiente', 
       color: '#FFA500', 
-      icon: 'calendar-outline', 
+      icon: 'time-outline', 
       canEdit: true, 
       canDelete: true,
       canEditItems: true,
-      canDeleteItems: true
+      hasValidItems: hasValidItems,
+      hasEmptyItems: hasEmptyItems,
+      hasNoItemsAtAll: hasNoItemsAtAll,
+      reason: hasNoItemsAtAll ? 'Sin maletas agregadas' : (hasEmptyItems ? `${totalBoxes} maleta${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
     };
   }
   
   if (isNaN(startDate.getTime())) {
     return { 
-      status: 'Planificado', 
+      status: 'Pendiente', 
       color: '#FFA500', 
-      icon: 'calendar-outline', 
+      icon: 'time-outline', 
       canEdit: true, 
       canDelete: true,
       canEditItems: true,
-      canDeleteItems: true
+      hasValidItems: hasValidItems,
+      hasEmptyItems: hasEmptyItems,
+      hasNoItemsAtAll: hasNoItemsAtAll,
+      reason: hasNoItemsAtAll ? 'Sin maletas agregadas' : (hasEmptyItems ? `${totalBoxes} maleta${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
     };
   }
   
@@ -179,15 +336,31 @@ const getItemStatus = (item) => {
   const startDateStr = startDate.toDateString();
   const endDateStr = endDate ? endDate.toDateString() : null;
   
-  if (todayStr === startDateStr) {
+  if (todayStr === startDateStr || (today >= startDate && (!endDate || today <= endDate))) {
+    if (!hasValidItems) {
+      return { 
+        status: 'Fallido', 
+        color: hasEmptyItems ? '#FF9800' : '#DC3545',
+        icon: hasEmptyItems ? 'alert-circle' : 'close-circle', 
+        canEdit: false, 
+        canDelete: false,
+        canEditItems: true,
+        hasValidItems: false,
+        hasEmptyItems: hasEmptyItems,
+        hasNoItemsAtAll: hasNoItemsAtAll,
+        reason: hasNoItemsAtAll ? 'Sin maletas agregadas' : `${totalBoxes} maleta${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}`
+      };
+    }
     return { 
-      status: 'Hoy', 
-      color: '#F44336', 
-      icon: 'warning', 
+      status: 'En curso', 
+      color: '#4CAF50', 
+      icon: 'airplane', 
       canEdit: false, 
       canDelete: false,
       canEditItems: false,
-      canDeleteItems: false
+      hasValidItems: true,
+      hasEmptyItems: false,
+      hasNoItemsAtAll: false
     };
   }
   
@@ -199,42 +372,52 @@ const getItemStatus = (item) => {
       canEdit: true, 
       canDelete: true,
       canEditItems: true,
-      canDeleteItems: true
+      hasValidItems: hasValidItems,
+      hasEmptyItems: hasEmptyItems,
+      hasNoItemsAtAll: hasNoItemsAtAll,
+      reason: hasNoItemsAtAll ? 'Sin maletas agregadas' : (hasEmptyItems ? `${totalBoxes} maleta${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
     };
   }
   
   if (endDate && !isNaN(endDate.getTime()) && today > endDate) {
+    if (!hasValidItems) {
+      return { 
+        status: 'Fallido', 
+        color: hasEmptyItems ? '#FF9800' : '#DC3545',
+        icon: hasEmptyItems ? 'alert-circle' : 'close-circle', 
+        canEdit: false, 
+        canDelete: true,
+        canEditItems: false,
+        hasValidItems: false,
+        hasEmptyItems: hasEmptyItems,
+        hasNoItemsAtAll: hasNoItemsAtAll,
+        reason: hasNoItemsAtAll ? 'Sin maletas agregadas' : `${totalBoxes} maleta${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}`
+      };
+    }
     return { 
       status: 'Completado', 
       color: '#888', 
       icon: 'checkmark-done', 
       canEdit: false, 
-      canDelete: false,
+      canDelete: true,
       canEditItems: false,
-      canDeleteItems: false
-    };
-  }
-  
-  if (today >= startDate && (!endDate || today <= endDate)) {
-    return { 
-      status: 'En curso', 
-      color: '#4CAF50', 
-      icon: 'airplane', 
-      canEdit: false, 
-      canDelete: false,
-      canEditItems: false,
-      canDeleteItems: false
+      hasValidItems: true,
+      hasEmptyItems: false,
+      hasNoItemsAtAll: false
     };
   }
   
   return { 
-    status: 'Planificado', 
+    status: 'Pendiente', 
     color: '#FFA500', 
-    icon: 'calendar-outline', 
+    icon: 'time-outline', 
     canEdit: true, 
     canDelete: true,
     canEditItems: true,
-    canDeleteItems: true
+    hasValidItems: hasValidItems,
+    hasEmptyItems: hasEmptyItems,
+    hasNoItemsAtAll: hasNoItemsAtAll,
+    reason: hasNoItemsAtAll ? 'Sin maletas agregadas' : (hasEmptyItems ? `${totalBoxes} maleta${totalBoxes !== 1 ? 's' : ''} vacía${totalBoxes !== 1 ? 's' : ''}` : '')
   };
 };
 
@@ -247,6 +430,10 @@ const MyTripsScreen = ({ navigation }) => {
   const [showStatusDropdown, setShowStatusDropdown] = useState(false);
   const [luggageCounts, setLuggageCounts] = useState({});
   const [boxCounts, setBoxCounts] = useState({});
+  const [validLuggageCounts, setValidLuggageCounts] = useState({});
+  const [validBoxCounts, setValidBoxCounts] = useState({});
+  const [totalItemsCounts, setTotalItemsCounts] = useState({});
+  const [itemsWithContent, setItemsWithContent] = useState({});
   
   const insets = useSafeAreaInsets();
 
@@ -273,50 +460,72 @@ const MyTripsScreen = ({ navigation }) => {
 
   useEffect(() => {
     filterItems();
-  }, [items, activeFilter, activeStatusFilter]);
+  }, [items, activeFilter, activeStatusFilter, itemsWithContent]);
 
   const loadItems = async () => {
     try {
       setLoading(true);
       const allItems = await getAllUserItems();
-      setItems(allItems);
       
-      await loadItemCounts(allItems);
+      const luggageCountsTemp = {};
+      const boxCountsTemp = {};
+      const validLuggageCountsTemp = {};
+      const validBoxCountsTemp = {};
+      const totalItemsCountsTemp = {};
+      const itemsWithContentTemp = {};
+      
+      for (const item of allItems) {
+        const isMoving = item.itemType === 'move';
+        const hasValid = await hasValidItems(item, isMoving);
+        itemsWithContentTemp[item.id] = hasValid;
+        
+        try {
+          if (isMoving) {
+            const totalBoxes = await countTotalContainers(item, isMoving);
+            boxCountsTemp[item.id] = totalBoxes;
+            luggageCountsTemp[item.id] = 0;
+            
+            const validBoxesCount = await countValidItems(item, isMoving);
+            validBoxCountsTemp[item.id] = validBoxesCount;
+            validLuggageCountsTemp[item.id] = 0;
+            
+            const totalItems = await countTotalItems(item, isMoving);
+            totalItemsCountsTemp[item.id] = totalItems;
+            
+          } else {
+            const totalLuggage = await countTotalContainers(item, isMoving);
+            luggageCountsTemp[item.id] = totalLuggage;
+            boxCountsTemp[item.id] = 0;
+            
+            const validLuggageCount = await countValidItems(item, isMoving);
+            validLuggageCountsTemp[item.id] = validLuggageCount;
+            validBoxCountsTemp[item.id] = 0;
+            
+            const totalItems = await countTotalItems(item, isMoving);
+            totalItemsCountsTemp[item.id] = totalItems;
+          }
+        } catch (error) {
+          luggageCountsTemp[item.id] = 0;
+          boxCountsTemp[item.id] = 0;
+          validLuggageCountsTemp[item.id] = 0;
+          validBoxCountsTemp[item.id] = 0;
+          totalItemsCountsTemp[item.id] = 0;
+        }
+      }
+      
+      setItems(allItems);
+      setItemsWithContent(itemsWithContentTemp);
+      setLuggageCounts(luggageCountsTemp);
+      setBoxCounts(boxCountsTemp);
+      setValidLuggageCounts(validLuggageCountsTemp);
+      setValidBoxCounts(validBoxCountsTemp);
+      setTotalItemsCounts(totalItemsCountsTemp);
       
     } catch (error) {
-      console.log('❌ Error cargando elementos:', error);
       Alert.alert('Error', 'No se pudieron cargar los elementos');
     } finally {
       setLoading(false);
     }
-  };
-
-  const loadItemCounts = async (itemsList) => {
-    const luggageCountsTemp = {};
-    const boxCountsTemp = {};
-    
-    for (const item of itemsList) {
-      const isMoving = item.itemType === 'move';
-      
-      try {
-        if (isMoving) {
-          const boxesList = await getBoxesByMoveId(item.id);
-          boxCountsTemp[item.id] = boxesList.length;
-          luggageCountsTemp[item.id] = 0;
-        } else {
-          const luggageList = await getLuggageByTripId(item.id);
-          luggageCountsTemp[item.id] = luggageList.length;
-          boxCountsTemp[item.id] = 0;
-        }
-      } catch (error) {
-        console.log(`❌ Error cargando conteo para ${isMoving ? 'mudanza' : 'viaje'} ${item.id}:`, error);
-        luggageCountsTemp[item.id] = 0;
-        boxCountsTemp[item.id] = 0;
-      }
-    }
-    
-    setLuggageCounts(luggageCountsTemp);
-    setBoxCounts(boxCountsTemp);
   };
 
   const filterItems = () => {
@@ -330,8 +539,23 @@ const MyTripsScreen = ({ navigation }) => {
 
     if (activeStatusFilter !== 'all') {
       filtered = filtered.filter(item => {
-        const itemStatus = getItemStatus(item);
-        return itemStatus.status.toLowerCase() === activeStatusFilter.toLowerCase();
+        const hasItems = itemsWithContent[item.id] || false;
+        const isMoving = item.itemType === 'move';
+        const validCount = isMoving ? validBoxCounts[item.id] || 0 : validLuggageCounts[item.id] || 0;
+        const totalCount = isMoving ? boxCounts[item.id] || 0 : luggageCounts[item.id] || 0;
+        const itemStatus = getItemStatus(item, hasItems, validCount, totalCount);
+        
+        if (activeStatusFilter === 'pendiente') {
+          return itemStatus.status === 'Pendiente';
+        } else if (activeStatusFilter === 'en curso') {
+          return itemStatus.status === 'En curso';
+        } else if (activeStatusFilter === 'completado') {
+          return itemStatus.status === 'Completado' || itemStatus.status === 'Completada';
+        } else if (activeStatusFilter === 'fallido') {
+          return itemStatus.status === 'Fallido';
+        }
+        
+        return false;
       });
     }
 
@@ -340,8 +564,23 @@ const MyTripsScreen = ({ navigation }) => {
 
   const getStatusCount = (status) => {
     return items.filter(item => {
-      const itemStatus = getItemStatus(item);
-      return itemStatus.status.toLowerCase() === status.toLowerCase();
+      const hasItems = itemsWithContent[item.id] || false;
+      const isMoving = item.itemType === 'move';
+      const validCount = isMoving ? validBoxCounts[item.id] || 0 : validLuggageCounts[item.id] || 0;
+      const totalCount = isMoving ? boxCounts[item.id] || 0 : luggageCounts[item.id] || 0;
+      const itemStatus = getItemStatus(item, hasItems, validCount, totalCount);
+      
+      if (status === 'pendiente') {
+        return itemStatus.status === 'Pendiente';
+      } else if (status === 'en curso') {
+        return itemStatus.status === 'En curso';
+      } else if (status === 'completado') {
+        return itemStatus.status === 'Completado' || itemStatus.status === 'Completada';
+      } else if (status === 'fallido') {
+        return itemStatus.status === 'Fallido';
+      }
+      
+      return false;
     }).length;
   };
 
@@ -350,11 +589,8 @@ const MyTripsScreen = ({ navigation }) => {
       case 'all': return 'Todos los estados';
       case 'pendiente': return 'Pendientes';
       case 'en curso': return 'En curso';
-      case 'completado': 
-      case 'completada': return 'Completados';
-      case 'hoy': return 'Hoy';
-      case 'planificado': 
-      case 'planificada': return 'Planificados';
+      case 'completado': return 'Completados';
+      case 'fallido': return 'Fallidos';
       default: return 'Todos los estados';
     }
   };
@@ -363,11 +599,8 @@ const MyTripsScreen = ({ navigation }) => {
     switch(activeStatusFilter) {
       case 'pendiente': return '#FFA500';
       case 'en curso': return '#4CAF50';
-      case 'completado': 
-      case 'completada': return '#888';
-      case 'hoy': return '#F44336';
-      case 'planificado': 
-      case 'planificada': return '#FFA500';
+      case 'completado': return '#888';
+      case 'fallido': return '#DC3545';
       default: return '#BB86FC';
     }
   };
@@ -376,11 +609,8 @@ const MyTripsScreen = ({ navigation }) => {
     switch(activeStatusFilter) {
       case 'pendiente': return 'time-outline';
       case 'en curso': return 'airplane';
-      case 'completado': 
-      case 'completada': return 'checkmark-done';
-      case 'hoy': return 'warning';
-      case 'planificado': 
-      case 'planificada': return 'calendar-outline';
+      case 'completado': return 'checkmark-done';
+      case 'fallido': return 'close-circle';
       default: return 'filter';
     }
   };
@@ -413,33 +643,98 @@ const MyTripsScreen = ({ navigation }) => {
     return { current: filteredItems.length, total: totalAll, text: text };
   };
 
-  const getItemCount = (item) => {
+  const getItemCounts = (item) => {
     const isMoving = item.itemType === 'move';
     
     if (isMoving) {
-      return boxCounts[item.id] || 0;
+      const totalBoxes = boxCounts[item.id] || 0;
+      const boxesWithItems = validBoxCounts[item.id] || 0;
+      const totalItems = totalItemsCounts[item.id] || 0;
+      
+      return {
+        total: totalBoxes,
+        withItems: boxesWithItems,
+        totalItems: totalItems,
+        hasValidItems: boxesWithItems > 0,
+        hasEmptyItems: totalBoxes > 0 && boxesWithItems === 0,
+        hasNoItemsAtAll: totalBoxes === 0
+      };
     } else {
-      return luggageCounts[item.id] || 0;
+      const totalLuggage = luggageCounts[item.id] || 0;
+      const luggageWithItems = validLuggageCounts[item.id] || 0;
+      const totalItems = totalItemsCounts[item.id] || 0;
+      
+      return {
+        total: totalLuggage,
+        withItems: luggageWithItems,
+        totalItems: totalItems,
+        hasValidItems: luggageWithItems > 0,
+        hasEmptyItems: totalLuggage > 0 && luggageWithItems === 0,
+        hasNoItemsAtAll: totalLuggage === 0
+      };
     }
-  };
-
-  const getDisplayType = (item) => {
-    return item.itemType === 'move' ? 'moving' : 'trips';
   };
 
   const handleDeleteItem = async (item) => {
     const isMoving = item.itemType === 'move';
-    const itemStatus = getItemStatus(item);
+    const counts = getItemCounts(item);
+    const hasItems = itemsWithContent[item.id] || false;
+    const itemStatus = getItemStatus(item, hasItems, counts.withItems, counts.total);
     
     if (!itemStatus.canDelete) {
+      let message = `No puedes eliminar ${isMoving ? 'mudanzas' : 'viajes'} que están ${itemStatus.status.toLowerCase()}.`;
+      
+      if (itemStatus.status === 'Fallido' && (counts.hasEmptyItems || counts.hasNoItemsAtAll)) {
+        message = `Este ${isMoving ? 'mudanza' : 'viaje'} no se completó porque ${itemStatus.reason}. ¿Deseas agregar items primero?`;
+        
+        Alert.alert(
+          `${isMoving ? 'Mudanza Fallida' : 'Viaje Fallido'}`,
+          message,
+          [
+            { text: 'Cancelar', style: 'cancel' },
+            { 
+              text: 'Agregar Items', 
+              onPress: () => {
+                if (isMoving) {
+                  navigation.navigate('NewBox', { 
+                    moveId: item.id,
+                    origin: item.origin,
+                    destination: item.destination,
+                    moveType: item.moveType,
+                    originScreen: 'MyTrips',
+                    forceBoxes: true
+                  });
+                } else {
+                  navigation.navigate('NewMaleta', { 
+                    tripId: item.id,
+                    forceLuggage: true
+                  });
+                }
+              }
+            },
+            { 
+              text: 'Eliminar Igual', 
+              style: 'destructive',
+              onPress: () => confirmDelete(item)
+            }
+          ]
+        );
+        return;
+      }
+      
       Alert.alert(
         `${isMoving ? 'Mudanza' : 'Viaje'} ${itemStatus.status}`,
-        `No puedes eliminar ${isMoving ? 'mudanzas' : 'viajes'} que están ${itemStatus.status.toLowerCase()}.`,
+        message,
         [{ text: 'Entendido' }]
       );
       return;
     }
 
+    confirmDelete(item);
+  };
+
+  const confirmDelete = async (item) => {
+    const isMoving = item.itemType === 'move';
     const mainTitle = item.purpose || item.destination || 
                      (isMoving ? (item.nombre || 'Mudanza') : 'Viaje');
     
@@ -470,13 +765,49 @@ const MyTripsScreen = ({ navigation }) => {
 
   const navigateToItemDetail = (item) => {
     const isMoving = item.itemType === 'move';
+    const counts = getItemCounts(item);
+    const hasItems = itemsWithContent[item.id] || false;
+    const itemStatus = getItemStatus(item, hasItems, counts.withItems, counts.total);
+    
+    if (itemStatus.status === 'Fallido' && itemStatus.canEditItems) {
+      Alert.alert(
+        `${isMoving ? 'Mudanza Fallida' : 'Viaje Fallido'}`,
+        itemStatus.reason || `Este ${isMoving ? 'mudanza' : 'viaje'} no tiene ${isMoving ? 'cajas' : 'maletas'}. ¿Deseas agregarlas ahora?`,
+        [
+          { text: 'Cancelar', style: 'cancel' },
+          { 
+            text: 'Agregar', 
+            onPress: () => {
+              if (isMoving) {
+                navigation.navigate('NewBox', { 
+                  moveId: item.id,
+                  origin: item.origin,
+                  destination: item.destination,
+                  moveType: item.moveType,
+                  originScreen: 'MyTrips',
+                  forceBoxes: true
+                });
+              } else {
+                navigation.navigate('NewMaleta', { 
+                  tripId: item.id,
+                  forceLuggage: true
+                });
+              }
+            }
+          }
+        ]
+      );
+      return;
+    }
     
     if (isMoving) {
       navigation.navigate('MoveDetail', { 
         moveId: item.id,
         moveOrigin: item.origin,
         moveDestination: item.destination,
-        moveType: item.moveType
+        moveType: item.moveType,
+        moveDate: item.moveDate,
+        origin: 'MyTrips'
       });
     } else {
       navigation.navigate('TripDetail', { trip: item });
@@ -485,7 +816,9 @@ const MyTripsScreen = ({ navigation }) => {
 
   const navigateToEditItem = (item) => {
     const isMoving = item.itemType === 'move';
-    const itemStatus = getItemStatus(item);
+    const counts = getItemCounts(item);
+    const hasItems = itemsWithContent[item.id] || false;
+    const itemStatus = getItemStatus(item, hasItems, counts.withItems, counts.total);
     
     if (!itemStatus.canEdit) {
       Alert.alert(
@@ -526,10 +859,11 @@ const MyTripsScreen = ({ navigation }) => {
 
   const renderTripItem = ({ item }) => {
     const isMoving = item.itemType === 'move';
-    const itemStatus = getItemStatus(item);
+    const counts = getItemCounts(item);
+    const hasItems = itemsWithContent[item.id] || false;
+    const itemStatus = getItemStatus(item, hasItems, counts.withItems, counts.total);
     const mainTitle = item.purpose || item.destination || 
                      (isMoving ? (item.nombre || 'Mudanza') : 'Viaje');
-    const itemCount = getItemCount(item);
     
     const locationText = isMoving 
       ? `${item.origin || 'Origen'} → ${item.destination || 'Destino'}`
@@ -541,7 +875,11 @@ const MyTripsScreen = ({ navigation }) => {
 
     return (
       <TouchableOpacity 
-        style={styles.tripItem}
+        style={[
+          styles.tripItem,
+          itemStatus.status === 'Fallido' && styles.failedItem,
+          counts.hasEmptyItems && styles.emptyItemsItem
+        ]}
         onPress={() => navigateToItemDetail(item)}
       >
         <View style={styles.tripHeader}>
@@ -562,7 +900,13 @@ const MyTripsScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.tripInfo}>
-          <Text style={styles.tripTitle}>{mainTitle}</Text>
+          <Text style={[
+            styles.tripTitle,
+            itemStatus.status === 'Fallido' && styles.failedTitle,
+            counts.hasEmptyItems && styles.emptyItemsTitle
+          ]}>
+            {mainTitle}
+          </Text>
           
           {locationText ? (
             <View style={styles.destinationRow}>
@@ -578,25 +922,59 @@ const MyTripsScreen = ({ navigation }) => {
             </View>
           ) : null}
 
+          {itemStatus.status === 'Fallido' && (
+            <View style={[
+              styles.failedMessageContainer,
+              counts.hasEmptyItems && styles.emptyItemsMessageContainer
+            ]}>
+              <Ionicons 
+                name={counts.hasEmptyItems ? "alert-circle" : "warning"} 
+                size={14} 
+                color={counts.hasEmptyItems ? "#FF9800" : "#DC3545"} 
+              />
+              <Text style={[
+                styles.failedMessage,
+                counts.hasEmptyItems && styles.emptyItemsMessage
+              ]}>
+                {itemStatus.reason}
+              </Text>
+            </View>
+          )}
+
           <View style={styles.footerRow}>
             <View style={styles.luggageInfo}>
               <Ionicons 
                 name={isMoving ? 'cube' : 'bag'} 
                 size={14} 
-                color="#888" 
+                color={counts.withItems > 0 ? "#4CAF50" : (counts.hasEmptyItems ? "#FF9800" : "#DC3545")} 
               />
-              <Text style={styles.tripLuggage}>
-                {itemCount} {isMoving ? 'caja' : 'maleta'}{itemCount !== 1 ? 's' : ''}
-              </Text>
+              <View>
+                <Text style={[
+                  styles.tripLuggage,
+                  counts.hasEmptyItems && styles.emptyItemsCount,
+                  counts.hasNoItemsAtAll && styles.noItemsText
+                ]}>
+                  {counts.withItems > 0 
+                    ? `${counts.withItems} ${isMoving ? 'caja' : 'maleta'}${counts.withItems !== 1 ? 's' : ''} con items`
+                    : `${counts.total} ${isMoving ? 'caja' : 'maleta'}${counts.total !== 1 ? 's' : ''} ${counts.hasEmptyItems ? 'vacía' : ''}${counts.hasEmptyItems && counts.total !== 1 ? 's' : ''}`
+                  }
+                </Text>
+                {counts.totalItems > 0 && (
+                  <Text style={styles.itemsCount}>
+                    {counts.totalItems} artículo{counts.totalItems !== 1 ? 's' : ''}
+                  </Text>
+                )}
+              </View>
             </View>
             {item.moveType && isMoving && (
               <View style={styles.moveTypeBadge}>
                 <Text style={styles.moveTypeText}>
                   {item.moveType === 'residential' ? '🚚 Residencial' :
                    item.moveType === 'office' ? '🏢 Oficina' :
-                   item.moveType === 'student' ? '🎓 Estudiantil' :
-                   item.moveType === 'international' ? '🌎 Internacional' :
-                   item.moveType === 'storage' ? '📦 Almacenamiento' : '🏠 Otro'}
+                   item.moveType === 'personal' ? '👤 Personal' :
+                   item.moveType === 'other' ?  '🏠 Otro': 
+                   item.moveType === 'company' ? '🏭 Empresa' : '🚚 Otro'}
+
                 </Text>
               </View>
             )}
@@ -707,7 +1085,7 @@ const MyTripsScreen = ({ navigation }) => {
 
         {showStatusDropdown && (
           <View style={styles.statusDropdown}>
-            {['all', 'pendiente', 'en curso', 'hoy', 'completado', 'planificado'].map((status) => (
+            {['all', 'pendiente', 'en curso', 'completado', 'fallido'].map((status) => (
               <TouchableOpacity
                 key={status}
                 style={[
@@ -729,9 +1107,8 @@ const MyTripsScreen = ({ navigation }) => {
                             backgroundColor: 
                               status === 'pendiente' ? '#FFA500' :
                               status === 'en curso' ? '#4CAF50' :
-                              status === 'hoy' ? '#F44336' :
                               status === 'completado' ? '#888' :
-                              '#FFA500'
+                              '#DC3545'
                           }
                         ]} 
                       />
@@ -743,9 +1120,8 @@ const MyTripsScreen = ({ navigation }) => {
                       {status === 'all' ? 'Todos los estados' :
                        status === 'pendiente' ? `Pendientes (${getStatusCount('pendiente')})` :
                        status === 'en curso' ? `En curso (${getStatusCount('en curso')})` :
-                       status === 'hoy' ? `Hoy (${getStatusCount('hoy')})` :
                        status === 'completado' ? `Completados (${getStatusCount('completado')})` :
-                       `Planificados (${getStatusCount('planificado')})`}
+                       `Fallidos (${getStatusCount('fallido')})`}
                     </Text>
                   </View>
                   {activeStatusFilter === status && (
@@ -794,7 +1170,6 @@ const MyTripsScreen = ({ navigation }) => {
   );
 };
 
-// Los estilos se mantienen exactamente iguales
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -946,6 +1321,14 @@ const styles = StyleSheet.create({
     borderLeftWidth: 4,
     borderLeftColor: '#2196F3',
   },
+  failedItem: {
+    borderLeftColor: '#DC3545',
+    backgroundColor: 'rgba(220, 53, 69, 0.05)',
+  },
+  emptyItemsItem: {
+    borderLeftColor: '#FF9800',
+    backgroundColor: 'rgba(255, 152, 0, 0.05)',
+  },
   tripHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -994,6 +1377,12 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginBottom: 8,
   },
+  failedTitle: {
+    color: '#DC3545',
+  },
+  emptyItemsTitle: {
+    color: '#FF9800',
+  },
   destinationRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1014,6 +1403,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#BB86FC',
   },
+  failedMessageContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: 'rgba(220, 53, 69, 0.1)',
+    padding: 8,
+    borderRadius: 6,
+    marginBottom: 8,
+    gap: 6,
+  },
+  emptyItemsMessageContainer: {
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
+  },
+  failedMessage: {
+    color: '#DC3545',
+    fontSize: 12,
+    fontWeight: '500',
+    flex: 1,
+  },
+  emptyItemsMessage: {
+    color: '#FF9800',
+  },
   footerRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1026,8 +1436,19 @@ const styles = StyleSheet.create({
   },
   tripLuggage: {
     fontSize: 12,
-    color: '#FF9800',
+    color: '#4CAF50',
     fontWeight: '500',
+  },
+  emptyItemsCount: {
+    color: '#FF9800',
+  },
+  noItemsText: {
+    color: '#DC3545',
+  },
+  itemsCount: {
+    fontSize: 10,
+    color: '#4CAF50',
+    marginTop: 2,
   },
   moveTypeBadge: {
     backgroundColor: 'rgba(187, 134, 252, 0.1)',
@@ -1051,6 +1472,14 @@ const styles = StyleSheet.create({
   },
   actionButton: {
     padding: 8,
+  },
+  addItemsButton: {
+    backgroundColor: 'rgba(76, 175, 80, 0.1)',
+    borderRadius: 6,
+    marginRight: 'auto',
+  },
+  emptyItemsButton: {
+    backgroundColor: 'rgba(255, 152, 0, 0.1)',
   },
   disabledButton: {
     opacity: 0.5,

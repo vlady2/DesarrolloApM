@@ -4,7 +4,9 @@ import {
   ActivityIndicator,
   Alert,
   BackHandler,
+  KeyboardAvoidingView,
   Modal,
+  Platform,
   ScrollView,
   StatusBar,
   StyleSheet,
@@ -27,30 +29,53 @@ const CATEGORIAS_MALETAS = [
   { id: 'extra_grande', nombre: 'Maleta Extra Grande', icon: 'cube-outline' }
 ];
 
-const ARTICULOS_PROHIBIDOS_POR_PAIS = {
-  'méxico': ['Frutas y vegetales frescos', 'Semillas sin certificado', 'Carne de res', 'Productos lácteos no pasteurizados'],
-  'mexico': ['Frutas y vegetales frescos', 'Semillas sin certificado', 'Carme de res', 'Productos lácteos no pasteurizados'],
-  'españa': ['Productos cárnicos de fuera de la UE', 'Plantas sin certificado fitosanitario', 'Drogas recreativas', 'Armas de fuego'],
-  'espana': ['Productos cárnicos de fuera de la UE', 'Plantas sin certificado fitosanitario', 'Drogas recreativas', 'Armas de fuego'],
-  'estados unidos': ['Frutas tropicales', 'Carne de cerdo', 'Quesos artesanales', 'Productos de CBD'],
-  'usa': ['Frutas tropicales', 'Carne de cerdo', 'Quesos artesanales', 'Productos de CBD'],
-  'ee.uu.': ['Frutas tropicales', 'Carne de cerdo', 'Quesos artesanales', 'Productos de CBD'],
-  'ue': ['Productos transgénicos no autorizados', 'Animales en peligro de extinción', 'Pesticidas prohibidos'],
-  'europa': ['Productos transgénicos no autorizados', 'Animales en peligro de extinción', 'Pesticidas prohibidos'],
-  'latinoamérica': ['Electrónicos sin factura', 'Juguetes con pilas de litio', 'Productos pirata'],
-  'latinoamerica': ['Electrónicos sin factura', 'Juguetes con pilas de litio', 'Productos pirata'],
-};
-
 const ARTICULOS_PROHIBIDOS_UNIVERSALES = [
-  'Líquidos sobre 100ml en equipaje de mano',
-  'Armas de cualquier tipo (incluidas réplicas)',
-  'Productos inflamables (aerósoles, gasolina)',
-  'Drogas ilegales y sustancias controladas',
-  'Animales vivos sin documentación',
-  'Comida perecedera sin refrigeración',
-  'Material pornográfico ilegal',
-  'Productos que infrinjan derechos de autor'
+  'Líquidos sobre 100ml en equipaje de mano (regla 3-1-1)',
+  'Armas de cualquier tipo (incluidas réplicas y objetos punzantes)',
+  'Productos inflamables (aerósoles, gasolina, fósforos, encendedores)',
+  'Drogas ilegales y sustancias controladas sin prescripción',
+  'Animales vivos sin documentación sanitaria y certificados',
+  'Comida perecedera sin refrigeración adecuada',
+  'Material explosivo o pirotécnico',
+  'Productos químicos tóxicos o corrosivos',
+  'Baterías de litio sueltas o dañadas',
+  'Objetos magnéticos fuertes que puedan interferir con equipos de vuelo'
 ];
+
+const PAISES_CON_RESTRICCIONES_ESPECIALES = {
+  'méxico/mexico': {
+    alimentos: ['Frutas y vegetales frescos', 'Carne de res y cerdo', 'Productos lácteos no pasteurizados'],
+    otros: ['Semillas sin certificado fitosanitario', 'Plantas sin permiso', 'Productos de cannabis']
+  },
+  'españa/espana': {
+    alimentos: ['Productos cárnicos de fuera de la UE', 'Leche y productos lácteos no UE'],
+    otros: ['Plantas sin certificado fitosanitario', 'Especies protegidas (CITES)']
+  },
+  'estados unidos/usa/ee.uu.': {
+    alimentos: ['Frutas tropicales frescas', 'Carne de cerdo', 'Quesos artesanales sin pasteurizar'],
+    otros: ['Productos de CBD/THC', 'Medicamentos no aprobados por FDA', 'Piratería']
+  },
+  'australia': {
+    alimentos: ['Cualquier alimento fresco o procesado', 'Productos de miel'],
+    otros: ['Productos de madera', 'Tierra o arena', 'Equipos deportivos usados']
+  },
+  'nueva zelanda/nuevazelanda': {
+    alimentos: ['Todos los productos agrícolas', 'Alimentos para camping'],
+    otros: ['Equipamiento deportivo sucio', 'Productos de piel animal']
+  },
+  'japón/japon': {
+    alimentos: ['Carne fresca y procesada', 'Frutas específicas como manzanas, cerezas'],
+    otros: ['Medicamentos no autorizados', 'Productos con contenido adulto explícito']
+  },
+  'canadá/canada': {
+    alimentos: ['Carne de res y aves', 'Productos lácteos no certificados'],
+    otros: ['Armas de defensa personal', 'Fuegos artificiales']
+  },
+  'reino unido': {
+    alimentos: ['Carne y productos cárnicos de países no UE', 'Leche rawa'],
+    otros: ['Especies en peligro (CITES)', 'Productos culturales robados']
+  }
+};
 
 const NewMaletaScreen = ({ route, navigation }) => {
   const { 
@@ -87,22 +112,22 @@ const NewMaletaScreen = ({ route, navigation }) => {
   const [saving, setSaving] = useState(false);
   const [showCategoriaModal, setShowCategoriaModal] = useState(false);
   const [articulosProhibidos, setArticulosProhibidos] = useState([]);
+  const [restriccionesPais, setRestriccionesPais] = useState({ alimentos: [], otros: [] });
   const [hasSavedLuggage, setHasSavedLuggage] = useState(false);
+  const [aiButtonPressed, setAiButtonPressed] = useState(false);
 
   const insets = useSafeAreaInsets();
 
-  // ✅ MODIFICADO: BackHandler BLOQUEANTE cuando forceLuggage es true
   useEffect(() => {
     const backAction = () => {
       if (navigation.isFocused()) {
-        // ✅ BLOQUEAR si es obligatorio y no ha guardado maleta
         if (forceLuggage && !hasSavedLuggage) {
           Alert.alert(
             'Acción requerida',
             'Debes completar y guardar al menos una maleta antes de poder salir, ya que tu viaje comienza hoy.',
             [{ text: 'Entendido' }]
           );
-          return true; // Bloquear retroceso
+          return true;
         }
         
         handleGoBack();
@@ -119,90 +144,58 @@ const NewMaletaScreen = ({ route, navigation }) => {
     return () => backHandler.remove();
   }, [navigation, origin, trip, forceLuggage, hasSavedLuggage]);
 
-  // ✅ MODIFICADO: Función de navegación que RESPETA EL ORIGIN
-  const handleGoBack = () => {
-    // ✅ BLOQUEAR si es obligatorio y no ha guardado maleta
-    if (forceLuggage && !hasSavedLuggage) {
-      Alert.alert(
-        'Acción requerida',
-        'Debes completar y guardar al menos una maleta antes de poder salir, ya que tu viaje comienza hoy.',
-        [{ text: 'Entendido' }]
-      );
-      return;
-    }
-
-    console.log('🟡 Navegando desde NewMaleta - Origen:', origin);
-    
-    // ✅ RESPETAR EL ORIGIN según la navegación original
-    switch(origin) {
-      case 'Home':
-        console.log('🔵 Regresando a Home');
-        navigation.navigate('Home');
-        break;
-      case 'TripDetail':
-        console.log('🔵 Regresando a TripDetail con trip completo');
-        navigation.navigate('TripDetail', { 
-          trip: trip || { id: tripId, destination, purpose } 
-        });
-        break;
-      case 'EditTrip':
-        console.log('🔵 Regresando a EditTrip');
-        navigation.navigate('EditTrip', { trip });
-        break;
-      default:
-        console.log('🔵 Regresando a TripDetail (default)');
-        navigation.navigate('TripDetail', { 
-          trip: trip || { id: tripId, destination, purpose } 
-        });
-    }
-  };
-
-  // Cargar sugerencias de IA y artículos prohibidos
   useEffect(() => {
-    if (!isEditMode) {
-      getAISuggestions();
-    }
     cargarArticulosProhibidos();
-  }, [destination, isEditMode]);
+  }, [destination]);
 
   const cargarArticulosProhibidos = () => {
-    console.log('🟡 Cargando artículos prohibidos para:', destination);
+    if (!destination) return;
     
-    let articulosEspecificos = [];
+    const destinoLower = destination.toLowerCase();
+    let restriccionesEspecificas = { alimentos: [], otros: [] };
     
-    if (destination) {
-      const destinoLower = destination.toLowerCase();
+    Object.keys(PAISES_CON_RESTRICCIONES_ESPECIALES).forEach(paisKey => {
+      const paises = paisKey.split('/');
+      const tieneCoincidencia = paises.some(pais => destinoLower.includes(pais));
       
-      Object.keys(ARTICULOS_PROHIBIDOS_POR_PAIS).forEach(pais => {
-        if (destinoLower.includes(pais)) {
-          console.log(`🔵 Encontrados artículos prohibidos para: ${pais}`);
-          articulosEspecificos = [...articulosEspecificos, ...ARTICULOS_PROHIBIDOS_POR_PAIS[pais]];
-        }
-      });
-    }
+      if (tieneCoincidencia) {
+        const restricciones = PAISES_CON_RESTRICCIONES_ESPECIALES[paisKey];
+        restriccionesEspecificas = {
+          alimentos: [...restriccionesEspecificas.alimentos, ...restricciones.alimentos],
+          otros: [...restriccionesEspecificas.otros, ...restricciones.otros]
+        };
+      }
+    });
     
-    const todosLosProhibidos = [
-      ...ARTICULOS_PROHIBIDOS_UNIVERSALES,
-      ...articulosEspecificos
-    ];
-    
-    console.log(`🟢 Total artículos prohibidos cargados: ${todosLosProhibidos.length}`);
-    setArticulosProhibidos(todosLosProhibidos);
+    setRestriccionesPais(restriccionesEspecificas);
+    setArticulosProhibidos(ARTICULOS_PROHIBIDOS_UNIVERSALES);
   };
 
   const getAISuggestions = async () => {
-    if (!destination && !purpose) {
-      Alert.alert('Info', 'No hay información del viaje para generar sugerencias');
+    if (!destination) {
+      Alert.alert('Información requerida', 'Se necesita el destino para generar sugerencias');
       return;
     }
 
     setLoadingAI(true);
+    setAiButtonPressed(true);
+    
     try {
       const API_URL = "https://api.groq.com/openai/v1/chat/completions";
 
-      const prompt = `Como experto en viajes, sugiere 10 artículos esenciales específicos para un viaje a ${destination} con propósito: ${purpose}. 
-      Considera el clima, actividades típicas y duración del viaje.
-      Responde SOLO con una lista separada por comas, sin numeración ni explicaciones.`;
+      const promptPurpose = purpose && purpose.trim() ? purpose : "viaje turístico general";
+      const prompt = `Como experto en packing y viajes, genera una lista de 10 artículos esenciales para viajar a ${destination} con propósito: ${promptPurpose}.
+      
+Requisitos:
+1. Genera SOLO 10 artículos específicos
+2. Cada artículo debe ser práctico y relevante
+3. Considera clima, cultura y actividades típicas de ${destination}
+4. Incluye tanto artículos básicos como específicos del destino
+5. Formato: lista separada por comas, sin numeración
+6. Solo dame la lista, sin explicaciones adicionales
+7. Si ya he generado sugerencias antes, crea una lista completamente nueva y diferente
+
+Ejemplo formato respuesta: "Articulo, Articulo, Articulo, Articulo ..."`;
 
       const response = await fetch(API_URL, {
         method: "POST",
@@ -215,7 +208,7 @@ const NewMaletaScreen = ({ route, navigation }) => {
           messages: [
             {
               role: "system",
-              content: "Eres un asistente especializado en viajes. Proporcionas listas concisas de artículos esenciales específicos para cada tipo de viaje."
+              content: "Eres un asistente especializado en packing para viajes. Proporcionas listas concisas y prácticas de artículos esenciales para diferentes tipos de viajes. Siempre respondes con listas separadas por comas."
             },
             {
               role: "user",
@@ -238,13 +231,17 @@ const NewMaletaScreen = ({ route, navigation }) => {
       }
       
       const aiMessage = data.choices[0].message.content;
-      const suggestions = aiMessage.split(',').map(item => item.trim()).filter(item => item);
+      const suggestions = aiMessage.split(',')
+        .map(item => item.trim())
+        .filter(item => item && item.length > 0)
+        .slice(0, 10); // Asegurar máximo 10 items
+      
       setSugerenciasIA(suggestions);
       
     } catch (error) {
       console.error('Error con IA:', error);
       const defaultSuggestions = [
-        'Pasaporte y documentos',
+        'Pasaporte y documentos de identidad',
         'Adaptador de enchufes internacional',
         'Medicamentos personales con receta',
         'Protector solar adecuado al clima',
@@ -261,12 +258,41 @@ const NewMaletaScreen = ({ route, navigation }) => {
     }
   };
 
+  const handleGoBack = () => {
+    if (forceLuggage && !hasSavedLuggage) {
+      Alert.alert(
+        'Acción requerida',
+        'Debes completar y guardar al menos una maleta antes de poder salir, ya que tu viaje comienza hoy.',
+        [{ text: 'Entendido' }]
+      );
+      return;
+    }
+
+    switch(origin) {
+      case 'Home':
+        navigation.navigate('Home');
+        break;
+      case 'TripDetail':
+        navigation.navigate('TripDetail', { 
+          trip: trip || { id: tripId, destination, purpose } 
+        });
+        break;
+      case 'EditTrip':
+        navigation.navigate('EditTrip', { trip });
+        break;
+      default:
+        navigation.navigate('TripDetail', { 
+          trip: trip || { id: tripId, destination, purpose } 
+        });
+    }
+  };
+
   const agregarArticulo = () => {
     if (articuloActual.trim()) {
       setMaleta({
         ...maleta,
         articulos: [...maleta.articulos, { 
-          id: Date.now().toString(), 
+          id: Date.now().toString() + Math.random(), 
           nombre: articuloActual.trim() 
         }]
       });
@@ -285,7 +311,7 @@ const NewMaletaScreen = ({ route, navigation }) => {
     setMaleta({
       ...maleta,
       articulos: [...maleta.articulos, { 
-        id: Date.now().toString(), 
+        id: Date.now().toString() + Math.random(), 
         nombre: sugerencia 
       }]
     });
@@ -297,12 +323,7 @@ const NewMaletaScreen = ({ route, navigation }) => {
     setShowCategoriaModal(false);
   };
 
-  // ✅ MODIFICADO: Función de guardado que RESPETA EL ORIGIN cuando NO es forceLuggage
   const guardarMaleta = async () => {
-    console.log('🟡 Botón presionado - Modo:', isEditMode ? 'EDITAR' : 'CREAR');
-    console.log('🟡 ForceLuggage:', forceLuggage);
-    console.log('🟡 Origin:', origin);
-    
     if (!maleta.categoria) {
       Alert.alert('Error', 'Por favor selecciona una categoría para la maleta');
       return;
@@ -325,24 +346,15 @@ const NewMaletaScreen = ({ route, navigation }) => {
         updatedAt: new Date()
       };
 
-      console.log('🟡 Enviando datos de maleta:', maletaData);
-      
       if (isEditMode && luggageId) {
-        console.log('✏️ Actualizando maleta existente:', luggageId);
         await updateLuggage(tripId, luggageId, maletaData);
-        console.log('🟢 Maleta actualizada correctamente');
       } else {
-        console.log('🆕 Creando nueva maleta');
         await saveMaleta(tripId, maletaData);
-        console.log('🟢 Maleta guardada correctamente en Firebase');
       }
       
-      // ✅ MARCAR QUE YA GUARDÓ UNA MALETA (desbloquea navegación)
       setHasSavedLuggage(true);
       
-      // ✅ MODIFICADO: Comportamiento DIFERENCIADO según forceLuggage
       if (forceLuggage) {
-        // ✅ MODO BLOQUEANTE: Viaje comienza hoy - SIEMPRE AL HOME
         Alert.alert(
           '✅ Maleta Guardada', 
           'Has completado la maleta requerida. ¿Deseas agregar otra maleta o finalizar?',
@@ -350,27 +362,23 @@ const NewMaletaScreen = ({ route, navigation }) => {
             {
               text: 'Finalizar',
               onPress: () => {
-                console.log('🔵 Navegando a HOME desde modo bloqueante');
-                // ✅ SIEMPRE AL HOME cuando el viaje comienza hoy
                 navigation.replace('Home');
               }
             },
             {
               text: 'Agregar Otra Maleta',
               onPress: () => {
-                console.log('🟡 Reiniciando formulario para nueva maleta...');
                 setMaleta({
                   categoria: '',
                   articulos: []
                 });
                 setSugerenciasIA([]);
-                getAISuggestions();
+                setAiButtonPressed(false);
               }
             }
           ]
         );
       } else {
-        // ✅ MODO NORMAL: RESPETAR EL ORIGIN
         Alert.alert(
           isEditMode ? '✅ Maleta Actualizada' : '✅ Maleta Guardada', 
           isEditMode ? 'Maleta actualizada correctamente' : '¿Deseas agregar otra maleta para este viaje?',
@@ -378,26 +386,19 @@ const NewMaletaScreen = ({ route, navigation }) => {
             {
               text: 'Finalizar',
               onPress: () => {
-                console.log('🔵 Navegando según ORIGIN:', origin);
-                
-                // ✅ RESPETAR EL ORIGIN cuando NO es forceLuggage
                 switch(origin) {
                   case 'Home':
-                    console.log('🔵 Navegando a Home');
                     navigation.navigate('Home');
                     break;
                   case 'TripDetail':
-                    console.log('🔵 Navegando a TripDetail');
                     navigation.navigate('TripDetail', { 
                       trip: trip || { id: tripId, destination, purpose } 
                     });
                     break;
                   case 'EditTrip':
-                    console.log('🔵 Navegando a EditTrip');
                     navigation.navigate('EditTrip', { trip });
                     break;
                   default:
-                    console.log('🔵 Navegando a TripDetail (default)');
                     navigation.navigate('TripDetail', { 
                       trip: trip || { id: tripId, destination, purpose } 
                     });
@@ -407,13 +408,12 @@ const NewMaletaScreen = ({ route, navigation }) => {
             ...(isEditMode ? [] : [{
               text: 'Agregar Otra Maleta',
               onPress: () => {
-                console.log('🟡 Reiniciando formulario para nueva maleta...');
                 setMaleta({
                   categoria: '',
                   articulos: []
                 });
                 setSugerenciasIA([]);
-                getAISuggestions();
+                setAiButtonPressed(false);
               }
             }])
           ]
@@ -428,7 +428,6 @@ const NewMaletaScreen = ({ route, navigation }) => {
     }
   };
 
-  // Header con indicador de modo bloqueante
   const renderHeader = () => (
     <View style={styles.header}>
       <TouchableOpacity onPress={handleGoBack}>
@@ -447,13 +446,20 @@ const NewMaletaScreen = ({ route, navigation }) => {
   );
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
+    <KeyboardAvoidingView
+      style={[styles.container, { paddingTop: insets.top }]}
+    behavior="padding"
+    keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+    >
       <StatusBar backgroundColor="#121212" barStyle="light-content" />
       
       {renderHeader()}
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* INDICADOR DE MODO BLOQUEANTE */}
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.scrollContent}
+      >
         {forceLuggage && (
           <View style={styles.requiredSection}>
             <Ionicons name="warning" size={16} color="#FFA500" />
@@ -463,16 +469,14 @@ const NewMaletaScreen = ({ route, navigation }) => {
           </View>
         )}
 
-        {/* Información del Viaje */}
         <View style={styles.tripInfo}>
           <Text style={styles.tripDestination}>Viaje a: {destination}</Text>
-          <Text style={styles.tripPurpose}>Propósito: {purpose}</Text>
+          <Text style={styles.tripPurpose}>Propósito: {purpose || 'No especificado'}</Text>
           {isEditMode && (
             <Text style={styles.editModeText}>Modo edición</Text>
           )}
         </View>
 
-        {/* Selección de Categoría */}
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Categoría de Maleta *</Text>
           <TouchableOpacity 
@@ -489,28 +493,57 @@ const NewMaletaScreen = ({ route, navigation }) => {
           </TouchableOpacity>
         </View>
 
-        {/* Artículos Prohibidos */}
+        {/* Sección de Artículos Prohibidos Mejorada */}
         <View style={styles.warningSection}>
           <View style={styles.warningHeader}>
-            <Text style={styles.warningTitle}>⚠️  Artículos Prohibidos</Text>
+            <Ionicons name="warning" size={20} color="#FFA000" />
+            <Text style={styles.warningTitle}>Artículos Prohibidos</Text>
           </View>
-          <Text style={styles.warningSubtitle}>
-            Para {destination || 'tu destino'}
-          </Text>
-          <View style={styles.prohibidosGrid}>
+          
+          <Text style={styles.warningSubtitle}>🚫 Prohibidos Universales (Todos los vuelos)</Text>
+          <View style={styles.prohibidosList}>
             {articulosProhibidos.map((item, index) => (
-              <View key={index} style={styles.prohibidoChip}>
+              <View key={`universal-${index}`} style={styles.prohibidoItem}>
                 <Ionicons name="close-circle" size={14} color="#F44336" />
                 <Text style={styles.prohibidoText}>{item}</Text>
               </View>
             ))}
           </View>
+
+          {restriccionesPais.alimentos.length > 0 && (
+            <>
+              <Text style={styles.warningSubtitle}>🍎 Restricciones Específicas para {destination}</Text>
+              <Text style={styles.restriccionCategoria}>Alimentos:</Text>
+              <View style={styles.prohibidosList}>
+                {restriccionesPais.alimentos.map((item, index) => (
+                  <View key={`alimento-${index}`} style={styles.prohibidoItem}>
+                    <Ionicons name="nutrition" size={14} color="#FF9800" />
+                    <Text style={styles.prohibidoText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {restriccionesPais.otros.length > 0 && (
+            <>
+              <Text style={styles.restriccionCategoria}>Otros productos:</Text>
+              <View style={styles.prohibidosList}>
+                {restriccionesPais.otros.map((item, index) => (
+                  <View key={`otro-${index}`} style={styles.prohibidoItem}>
+                    <Ionicons name="alert-circle" size={14} color="#2196F3" />
+                    <Text style={styles.prohibidoText}>{item}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
           <Text style={styles.warningNote}>
-            * Lista referencial. Verifica regulaciones actuales con tu aerolínea.
+            ⚠️ Lista informativa. Consulta regulaciones actualizadas con tu aerolínea y aduanas del destino.
           </Text>
         </View>
 
-        {/* Agregar Artículos Manualmente */}
         <View style={styles.formSection}>
           <Text style={styles.sectionTitle}>Artículos ({maleta.articulos.length})</Text>
           
@@ -522,13 +555,13 @@ const NewMaletaScreen = ({ route, navigation }) => {
               value={articuloActual}
               onChangeText={setArticuloActual}
               onSubmitEditing={agregarArticulo}
+              returnKeyType="done"
             />
             <TouchableOpacity style={styles.addButton} onPress={agregarArticulo}>
               <Ionicons name="add" size={20} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
-          {/* Lista de Artículos */}
           {maleta.articulos.map((articulo) => (
             <View key={articulo.id} style={styles.item}>
               <Text style={styles.itemText}>{articulo.nombre}</Text>
@@ -539,45 +572,70 @@ const NewMaletaScreen = ({ route, navigation }) => {
           ))}
         </View>
 
-        {/* Sugerencias de IA - Solo en modo creación */}
-        {!isEditMode && (
+        {/* Sugerencias de IA Optimizadas */}
+        {!isEditMode && !aiButtonPressed && (
           <View style={styles.formSection}>
-            <View style={styles.aiHeader}>
-              <Text style={styles.sectionTitle}>Sugerencias de IA</Text>
-              <TouchableOpacity 
-                style={styles.aiButton} 
-                onPress={getAISuggestions}
-                disabled={loadingAI}
-              >
-                {loadingAI ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Ionicons name="sparkles" size={16} color="#FFFFFF" />
-                )}
-                <Text style={styles.aiButtonText}>
-                  {loadingAI ? 'Generando...' : 'Actualizar'}
-                </Text>
-              </TouchableOpacity>
+            <View style={styles.aiSuggestionHeader}>
+              <Ionicons name="sparkles" size={20} color="#BB86FC" />
+              <Text style={styles.sectionTitle}>¿Necesitas ideas?</Text>
             </View>
-
-            <Text style={styles.aiSubtitle}>Basado en tu destino y propósito</Text>
             
-            <View style={styles.suggestionsGrid}>
-              {sugerenciasIA.map((sugerencia, index) => (
-                <TouchableOpacity
-                  key={index}
-                  style={styles.suggestionChip}
-                  onPress={() => agregarSugerencia(sugerencia)}
-                >
-                  <Text style={styles.suggestionText}>{sugerencia}</Text>
-                  <Ionicons name="add" size={14} color="#4CAF50" />
-                </TouchableOpacity>
-              ))}
-            </View>
+            <TouchableOpacity 
+              style={styles.aiGenerateButton} 
+              onPress={getAISuggestions}
+              disabled={loadingAI}
+            >
+              {loadingAI ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <>
+                  <Ionicons name="bulb" size={18} color="#FFFFFF" />
+                  <Text style={styles.aiGenerateButtonText}>
+                    Generar sugerencias con IA
+                  </Text>
+                </>
+              )}
+            </TouchableOpacity>
+            
+            <Text style={styles.aiHintText}>
+              La IA analizará tu destino{purpose ? ' y propósito' : ''} para sugerir artículos relevantes
+            </Text>
           </View>
         )}
 
-        {/* Botón Guardar/Actualizar */}
+        {!isEditMode && aiButtonPressed && sugerenciasIA.length > 0 && (
+          <View style={styles.formSection}>
+            <View style={styles.aiHeader}>
+              <Text style={styles.sectionTitle}>Sugerencias de IA</Text>
+              <Text style={styles.aiCount}>{sugerenciasIA.length} sugerencias</Text>
+            </View>
+
+            <Text style={styles.aiSubtitle}>
+              Basado en tu viaje a {destination}{purpose ? ` (${purpose})` : ''}
+            </Text>
+            
+            <View style={styles.suggestionsList}>
+              {sugerenciasIA.map((sugerencia, index) => (
+                <TouchableOpacity
+                  key={index}
+                  style={styles.suggestionItem}
+                  onPress={() => agregarSugerencia(sugerencia)}
+                >
+                  <View style={styles.suggestionLeft}>
+                    <Ionicons name="checkmark-circle-outline" size={16} color="#4CAF50" />
+                    <Text style={styles.suggestionText}>{sugerencia}</Text>
+                  </View>
+                  <Ionicons name="add-circle" size={20} color="#BB86FC" />
+                </TouchableOpacity>
+              ))}
+            </View>
+            
+            <Text style={styles.aiNote}>
+              Presiona cualquier sugerencia para agregarla a tu lista
+            </Text>
+          </View>
+        )}
+
         <TouchableOpacity 
           style={[styles.saveButton, saving && styles.saveButtonDisabled]} 
           onPress={guardarMaleta}
@@ -593,7 +651,6 @@ const NewMaletaScreen = ({ route, navigation }) => {
         </TouchableOpacity>
       </ScrollView>
 
-      {/* Modal de Selección de Categoría */}
       <Modal
         visible={showCategoriaModal}
         transparent
@@ -640,11 +697,10 @@ const NewMaletaScreen = ({ route, navigation }) => {
           </View>
         </TouchableWithoutFeedback>
       </Modal>
-    </View>
+    </KeyboardAvoidingView>
   );
 };
 
-// Los estilos se mantienen igual...
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -677,6 +733,10 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     padding: 20,
+  },
+  scrollContent: {
+    flexGrow: 1,
+    paddingBottom: 40,
   },
   requiredSection: {
     flexDirection: 'row',
@@ -743,53 +803,62 @@ const styles = StyleSheet.create({
     fontSize: 16,
   },
   warningSection: {
-    backgroundColor: 'rgba(244, 67, 54, 0.1)',
+    backgroundColor: 'rgba(255, 160, 0, 0.05)',
     padding: 15,
     borderRadius: 10,
     marginBottom: 25,
-    borderLeftWidth: 4,
-    borderLeftColor: '#F44336',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 160, 0, 0.3)',
   },
   warningHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 5,
+    marginBottom: 10,
     gap: 8,
   },
   warningTitle: {
     color: '#FFA000',
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
   },
   warningSubtitle: {
     color: '#FFA000',
     fontSize: 14,
-    marginBottom: 10,
-    fontStyle: 'italic',
+    fontWeight: '600',
+    marginTop: 15,
+    marginBottom: 8,
   },
-  warningNote: {
-    color: '#FFA000',
-    fontSize: 10,
-    marginTop: 8,
-    fontStyle: 'italic',
+  restriccionCategoria: {
+    color: '#FF9800',
+    fontSize: 13,
+    fontWeight: '500',
+    marginTop: 10,
+    marginBottom: 5,
   },
-  prohibidosGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+  prohibidosList: {
     gap: 8,
   },
-  prohibidoChip: {
+  prohibidoItem: {
     flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: 'rgba(244, 67, 54, 0.2)',
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 15,
-    gap: 5,
+    alignItems: 'flex-start',
+    backgroundColor: 'rgba(255, 160, 0, 0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    gap: 8,
   },
   prohibidoText: {
     color: '#FFA000',
     fontSize: 12,
+    flex: 1,
+    lineHeight: 16,
+  },
+  warningNote: {
+    color: '#FFA000',
+    fontSize: 10,
+    marginTop: 12,
+    fontStyle: 'italic',
+    textAlign: 'center',
   },
   addItemContainer: {
     flexDirection: 'row',
@@ -827,25 +896,43 @@ const styles = StyleSheet.create({
     fontSize: 16,
     flex: 1,
   },
+  aiSuggestionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  aiGenerateButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#BB86FC',
+    padding: 16,
+    borderRadius: 10,
+    gap: 10,
+  },
+  aiGenerateButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  aiHintText: {
+    color: '#BB86FC',
+    fontSize: 12,
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
+  },
   aiHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 10,
   },
-  aiButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#BB86FC',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 5,
-  },
-  aiButtonText: {
-    color: '#FFFFFF',
+  aiCount: {
+    color: '#BB86FC',
     fontSize: 12,
-    fontWeight: 'bold',
+    fontWeight: '600',
   },
   aiSubtitle: {
     color: '#BB86FC',
@@ -853,23 +940,36 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     fontStyle: 'italic',
   },
-  suggestionsGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 10,
+  suggestionsList: {
+    gap: 8,
   },
-  suggestionChip: {
+  suggestionItem: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: 'rgba(187, 134, 252, 0.1)',
+    padding: 12,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: 'rgba(187, 134, 252, 0.3)',
+  },
+  suggestionLeft: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#2A2A2A',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 20,
-    gap: 5,
+    gap: 10,
+    flex: 1,
   },
   suggestionText: {
     color: '#FFFFFF',
-    fontSize: 12,
+    fontSize: 14,
+    flex: 1,
+  },
+  aiNote: {
+    color: '#BB86FC',
+    fontSize: 10,
+    marginTop: 8,
+    textAlign: 'center',
+    fontStyle: 'italic',
   },
   saveButton: {
     backgroundColor: '#4CAF50',
