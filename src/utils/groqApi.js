@@ -12,7 +12,7 @@ export const callGroq = async (pregunta) => {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer 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`
+      Authorization: `Bearer `
     },
     body: JSON.stringify({
       model: "llama-3.1-8b-instant",
