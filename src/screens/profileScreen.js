@@ -9,6 +9,8 @@ import {
   Alert,
   Animated,
   Dimensions,
+  Platform,
+  StyleSheet,
   View
 } from 'react-native';
 import Ionicons from 'react-native-vector-icons/Ionicons';

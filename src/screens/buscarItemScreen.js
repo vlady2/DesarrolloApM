@@ -1,78 +1,41 @@
-import { useState } from "react";
-import {
-    ActivityIndicator,
-    Button,
-    ScrollView,
-    TextInput,
-    View
-} from "react-native";
-import { buscarItemConIA, getMaletasConItems } from "../../firebase/iaService";
-import ChatBubble from "./chatIAB";
+import { collection, getDocs } from "firebase/firestore";
+import { db } from "../../firebase/auth";
 
-export default function buscarItemScreen({ route }) {
-  const { viajeId } = route.params; // Viaje seleccionado
-  const [pregunta, setPregunta] = useState("");
-  const [mensajes, setMensajes] = useState([]);
-  const [loading, setLoading] = useState(false);
+export const buscarItemEnFirebase = async (nombreBuscado) => {
 
-  const handleSearch = async () => {
-    if (!pregunta.trim()) return;
+  const viajesSnap = await getDocs(collection(db, "trips"));
 
-    setMensajes((prev) => [...prev, { text: pregunta, isUser: true }]);
-    setLoading(true);
+  for (let viajeDoc of viajesSnap.docs) {
+    const viajeId = viajeDoc.id;
+    const viajeData = viajeDoc.data();
 
-    try {
-      // 1. Traer maletas + items
-      const maletas = await getMaletasConItems(viajeId);
+    const maletasRef = collection(db, `trips/${viajeId}/maletas`);
+    const maletasSnap = await getDocs(maletasRef);
 
-      // 2. Usar IA
-      const respuesta = await buscarItemConIA(pregunta, maletas);
+    for (let maletaDoc of maletasSnap.docs) {
+      const maletaData = maletaDoc.data();
 
-      // 3. Añadir respuesta al chat
-      setMensajes((prev) => [...prev, { text: respuesta, isUser: false }]);
+      if (Array.isArray(maletaData.articulos)) {
+        
+        const encontrado = maletaData.articulos.some(item =>
+          item.toLowerCase().includes(nombreBuscado.toLowerCase())
+        );
 
-    } catch (e) {
-      setMensajes((prev) => [
-        ...prev,
-        { text: "Error al procesar la consulta.", isUser: false },
-      ]);
+        if (encontrado) {
+          return {
+            viaje: {
+              nombre: viajeData.nombre || "Viaje sin nombre",
+              direccion: viajeData.direccion || "",
+            },
+            maleta: {
+              nombre: maletaData.nombre,
+            },
+            articulo: nombreBuscado
+          };
+        }
+      }
     }
+  }
 
-    setLoading(false);
-    setPregunta("");
-  };
-
-  return (
-    <View style={{ flex: 1, padding: 10 }}>
-      <ScrollView style={{ flex: 1 }}>
-        {mensajes.map((msg, index) => (
-          <ChatBubble key={index} text={msg.text} isUser={msg.isUser} />
-        ))}
-
-        {loading && <ActivityIndicator size="large" style={{ marginTop: 10 }} />}
-      </ScrollView>
-
-      <View
-        style={{
-          flexDirection: "row",
-          alignItems: "center",
-          paddingVertical: 10,
-        }}
-      >
-        <TextInput
-          placeholder="Pregúntame por un item..."
-          value={pregunta}
-          onChangeText={setPregunta}
-          style={{
-            flex: 1,
-            borderWidth: 1,
-            borderColor: "#ccc",
-            padding: 10,
-            borderRadius: 10,
-          }}
-        />
-        <Button title="Buscar" onPress={handleSearch} />
-      </View>
-    </View>
-  );
-}
+  return null;
+};

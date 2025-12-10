@@ -454,6 +454,12 @@ const performDeleteLuggage = async (luggageItem) => {
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Detalle del Viaje</Text>
         <View style={styles.headerActions}>
+
+          <TouchableOpacity onPress={() => navigation.navigate('chatIA')}
+            style={styles.headerButton}>
+            <Ionicons name="search" size={24} color="#21f356ff" />
+          </TouchableOpacity>
+
           <TouchableOpacity onPress={navigateToEditTrip} style={styles.headerButton}>
             <Ionicons name="create" size={24} color="#2196F3" />
           </TouchableOpacity>
